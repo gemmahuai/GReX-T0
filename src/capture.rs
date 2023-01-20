@@ -45,6 +45,35 @@ struct TPacketReq {
     frame_number: c_uint,
 }
 
+impl TPacketReq {
+    // Checks the things in `packet_set_ring`, but with better error handling
+    fn validate(&self) {
+        let page_size = sysconf(SysconfVar::PAGE_SIZE)
+            .expect("Unable to get the page size")
+            .unwrap() as u32;
+        let frames_per_block = self.block_size / self.frame_size;
+        assert_eq!(
+            self.block_size % page_size,
+            0,
+            "Block size must be a multiple of the page size"
+        );
+        assert!(
+            self.frame_size > TPACKET_HDRLEN as u32,
+            "Frame must be bigger than the header"
+        );
+        assert_eq!(
+            self.frame_size % TPACKET_ALIGNMENT as u32,
+            0,
+            "Frame must be a multiple of the packet alignment (16)"
+        );
+        assert_eq!(
+            self.frame_number,
+            frames_per_block * self.block_number,
+            "The number of frames must equal the number of frames per block times the number of blocks"
+        );
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Default)]
 struct TPacketHdr {
@@ -78,10 +107,12 @@ impl UdpCap {
         let page_size = sysconf(SysconfVar::PAGE_SIZE)
             .expect("Unable to get the page size")
             .unwrap() as u32;
-        req.block_size = (req.frame_size / page_size + 1).next_power_of_two();
+        req.block_size = (req.frame_size / page_size + 1).next_power_of_two() * page_size;
         req.block_number = CONF_RING_FRAMES as u32;
-        req.frame_number = req.block_number * req.block_size / req.frame_size;
+        req.frame_number = req.block_number * (req.block_size / req.frame_size);
         // And finally perform the request
+        dbg!(&req);
+        req.validate();
         // Safety: FD is valid because we've used a safe API, req exists, and we're checking the return
         if unsafe {
             setsockopt(
@@ -156,6 +187,7 @@ impl Drop for UdpCap {
             )
             .expect("Failed un un-mmap the ring buffer")
         };
+        // Close the socket (although this might also close the mmap, not sure)
         close(self.fd).expect("Failed to close socket fd")
     }
 }

@@ -1,3 +1,4 @@
+use crate::if_packet::*;
 use nix::{
     libc::{setsockopt, sockaddr_ll, SOL_PACKET},
     sys::{
@@ -7,7 +8,7 @@ use nix::{
     unistd::{close, sysconf, SysconfVar},
 };
 use std::{
-    ffi::{c_int, c_uint, c_ulong, c_ushort, c_void},
+    ffi::{c_uint, c_void},
     mem::size_of,
     num::NonZeroUsize,
     os::fd::RawFd,
@@ -15,83 +16,24 @@ use std::{
 
 /// The number of frames in the ring
 const CONF_RING_FRAMES: usize = 128;
-const PACKET_RX_RING: c_int = 5;
-const ETH_HLEN: usize = 14;
-const TPACKET_ALIGNMENT: usize = 16;
-const fn tpacket_align(x: usize) -> usize {
+const ETH_HLEN: u32 = 14;
+const fn tpacket_align(x: u32) -> u32 {
     ((x) + TPACKET_ALIGNMENT - 1) & !(TPACKET_ALIGNMENT - 1)
 }
-const TPACKET_HDRLEN: usize = tpacket_align(size_of::<TPacketHdr>()) + size_of::<sockaddr_ll>();
+const TPACKET3_HDRLEN: u32 =
+    tpacket_align(size_of::<tpacket3_hdr>() as u32) + size_of::<sockaddr_ll>() as u32;
 
-#[derive(Debug)]
 pub struct UdpCap {
     fd: RawFd,
-    req: TPacketReq,
+    req: tpacket_req3,
     frame_idx: usize,
     frame_ptr: *mut u8,
     rx_ring: *mut u8,
 }
 
-#[repr(C)]
-#[derive(Debug, Default)]
-struct TPacketReq {
-    /// Minimal size of contiguous block
-    block_size: c_uint,
-    /// Number of blocks
-    block_number: c_uint,
-    /// Size of frame
-    frame_size: c_uint,
-    /// Total number of frames
-    frame_number: c_uint,
-}
-
-impl TPacketReq {
-    // Checks the things in `packet_set_ring`, but with better error handling
-    fn validate(&self) {
-        let page_size = sysconf(SysconfVar::PAGE_SIZE)
-            .expect("Unable to get the page size")
-            .unwrap() as u32;
-        let frames_per_block = self.block_size / self.frame_size;
-        assert_eq!(
-            self.block_size % page_size,
-            0,
-            "Block size must be a multiple of the page size"
-        );
-        assert!(
-            self.frame_size > TPACKET_HDRLEN as u32,
-            "Frame must be bigger than the header"
-        );
-        assert_eq!(
-            self.frame_size % TPACKET_ALIGNMENT as u32,
-            0,
-            "Frame must be a multiple of the packet alignment (16)"
-        );
-        assert_eq!(
-            self.frame_number,
-            frames_per_block * self.block_number,
-            "The number of frames must equal the number of frames per block times the number of blocks"
-        );
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Default)]
-struct TPacketHdr {
-    status: c_ulong,
-    len: c_uint,
-    snaplen: c_uint,
-    mac: c_ushort,
-    net: c_ushort,
-    sec: c_uint,
-    usec: c_uint,
-}
-
 impl UdpCap {
     pub fn new(mtu: usize) -> Self {
         // Create the AF_PACKET socket file descriptor
-        // We want to use TPACKET_V2 to maximize perf on 64-bit systems.
-        // We don't need TPACKET_V3 as technically we know we are recieving
-        // fixed size packets.
         let fd = socket(
             AddressFamily::Packet,
             SockType::Datagram,
@@ -99,28 +41,56 @@ impl UdpCap {
             SockProtocol::Udp,
         )
         .expect("Creating the raw socket failed");
-        // Start to set up the ring buffer request
-        let mut req = TPacketReq::default();
+        // Set the socket option to use TPACKET_V3
+        let v = tpacket_versions_TPACKET_V3;
+        if unsafe {
+            setsockopt(
+                fd,
+                SOL_PACKET,
+                PACKET_VERSION.try_into().unwrap(),
+                &v as *const _ as *const c_void,
+                size_of::<u32>() as u32,
+            )
+        } == -1
+        {
+            panic!(
+                "Setting the PACKET_VERSION to TPACKET_V3 failed: {:#?}",
+                std::io::Error::last_os_error()
+            );
+        }
+
         // Frames will be header + MTU
-        req.frame_size = (tpacket_align(TPACKET_HDRLEN + ETH_HLEN) + tpacket_align(mtu)) as c_uint;
+        let frame_size =
+            (tpacket_align(TPACKET3_HDRLEN + ETH_HLEN) + tpacket_align(mtu as u32)) as c_uint;
         // Blocks are the smallest power of two multiple of the page size that is at least the frame size
         let page_size = sysconf(SysconfVar::PAGE_SIZE)
             .expect("Unable to get the page size")
             .unwrap() as u32;
-        req.block_size = (req.frame_size / page_size + 1).next_power_of_two() * page_size;
-        req.block_number = CONF_RING_FRAMES as u32;
-        req.frame_number = req.block_number * (req.block_size / req.frame_size);
-        // And finally perform the request
+        let block_size = (frame_size / page_size + 1).next_power_of_two() * page_size;
+        let block_number = CONF_RING_FRAMES as u32;
+        let frame_number = (block_number * block_size) / frame_size;
+
+        // Start to set up the ring buffer request
+        let req = tpacket_req3 {
+            tp_block_size: block_size,
+            tp_block_nr: block_number,
+            tp_frame_size: frame_size,
+            tp_frame_nr: frame_number,
+            tp_retire_blk_tov: 60,
+            tp_sizeof_priv: 0,
+            tp_feature_req_word: TP_FT_REQ_FILL_RXHASH,
+        };
+
         dbg!(&req);
-        req.validate();
+
         // Safety: FD is valid because we've used a safe API, req exists, and we're checking the return
         if unsafe {
             setsockopt(
                 fd,
                 SOL_PACKET,
-                PACKET_RX_RING,
+                PACKET_RX_RING.try_into().unwrap(),
                 &req as *const _ as *const c_void,
-                size_of::<TPacketReq>() as u32,
+                size_of::<tpacket_req3>() as u32,
             )
         } == -1
         {
@@ -133,9 +103,9 @@ impl UdpCap {
         let rx_ring = unsafe {
             mmap(
                 None,
-                NonZeroUsize::new((req.block_number * req.block_size) as usize).unwrap(),
+                NonZeroUsize::new((block_number * block_size) as usize).unwrap(),
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                MapFlags::MAP_SHARED,
+                MapFlags::MAP_SHARED | MapFlags::MAP_LOCKED,
                 fd,
                 0,
             )
@@ -150,31 +120,6 @@ impl UdpCap {
             rx_ring,
         }
     }
-
-    fn recv_next_block(&mut self) {
-        // Handle frame
-        let frames_per_buffer = (self.req.block_size / self.req.block_number) as usize;
-        // Increment frame index, wrapping around if end of buffer is reached.
-        self.frame_idx = (self.frame_idx + 1) % self.req.frame_number as usize;
-        // Determine the location of the buffer which the next frame lies within.
-        let buffer_idx = self.frame_idx / frames_per_buffer as usize;
-        let buffer_ptr = unsafe {
-            self.rx_ring.offset(
-                (buffer_idx * self.req.block_size as usize)
-                    .try_into()
-                    .unwrap(),
-            )
-        };
-        // Determine the location of the frame within that buffer.
-        let frame_idx_diff = self.frame_idx % frames_per_buffer;
-        self.frame_ptr = unsafe {
-            buffer_ptr.offset(
-                (frame_idx_diff * self.req.frame_size as usize)
-                    .try_into()
-                    .unwrap(),
-            )
-        };
-    }
 }
 
 impl Drop for UdpCap {
@@ -183,7 +128,7 @@ impl Drop for UdpCap {
         unsafe {
             munmap(
                 self.rx_ring as *mut c_void,
-                (self.req.block_number * self.req.block_size) as usize,
+                (self.req.tp_block_nr * self.req.tp_block_size) as usize,
             )
             .expect("Failed un un-mmap the ring buffer")
         };

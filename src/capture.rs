@@ -94,8 +94,10 @@ impl Capture {
     }
 
     pub fn capture_task(mut self, payload_sender: Sender<Payload>, stat_sender: Sender<Stat>) -> ! {
+        println!("Starting capture task!");
         let mut count = 0;
         loop {
+            println!("{count}");
             if count == STAT_PACKET_INTERVAL {
                 count = 0;
                 stat_sender

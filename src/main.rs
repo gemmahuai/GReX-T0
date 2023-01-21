@@ -1,5 +1,6 @@
 pub mod args;
 pub mod capture;
+pub mod exfil;
 pub mod monitoring;
 
 use clap::Parser;
@@ -21,8 +22,11 @@ fn main() {
     let mon_thread = std::thread::spawn(move || monitor_task(sr));
     // Start the capture thread
     let cap_thread = std::thread::spawn(move || cap.capture_task(ps, ss));
+    // Start a dummy exfil
+    let dummy = std::thread::spawn(move || exfil::dummy_consumer(pr));
 
     // Join the threads into the main task once they bail
     mon_thread.join().unwrap();
     cap_thread.join().unwrap();
+    dummy.join().unwrap();
 }

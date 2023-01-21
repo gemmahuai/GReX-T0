@@ -14,7 +14,7 @@ use crossbeam_channel::bounded;
 use monitoring::monitor_task;
 use processing::downsample_thread;
 
-const THREAD_CHAN_SIZE: usize = 100;
+const THREAD_CHAN_SIZE: usize = 500;
 
 fn main() {
     // Get the CLI options

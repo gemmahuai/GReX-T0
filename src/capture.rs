@@ -90,7 +90,8 @@ impl Capture {
         if pak.data.len() != (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
             return None;
         }
-        Some(Payload::from_bytes(&pak.data[UDP_HEADER_SIZE..]))
+        Some(Payload::default())
+        //Some(Payload::from_bytes(&pak.data[UDP_HEADER_SIZE..]))
     }
 
     pub fn capture_task(mut self, payload_sender: Sender<Payload>, stat_sender: Sender<Stat>) -> ! {

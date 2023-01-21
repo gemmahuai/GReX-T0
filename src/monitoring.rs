@@ -3,6 +3,8 @@ use crossbeam_channel::Receiver;
 use pcap::Stat;
 use std::time::Instant;
 
+#[allow(clippy::cast_precision_loss)]
+#[allow(clippy::similar_names)]
 pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
     println!("Starting monitoring task!");
     let mut last_state = Instant::now();

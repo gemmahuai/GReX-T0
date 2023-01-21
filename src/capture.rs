@@ -87,9 +87,11 @@ pub fn pcap_task(
     loop {
         if count == STAT_PACKET_INTERVAL {
             count = 0;
-            stat_sender
-                .send(cap.0.stats().expect("Getting capture statistics failed"))
-                .expect("Sending capture statistics failed");
+            if let Ok(_) =
+                stat_sender.try_send(cap.0.stats().expect("Failed to get capture statistics"))
+            {
+                // We don't care about dropping stats, we *do* care about dropping packets
+            }
         }
         if let Some(payload) = cap.next_payload() {
             if payload_sender.try_send(payload).is_ok() {

@@ -30,7 +30,9 @@ pub fn downsample_thread(
             avg.iter_mut()
                 .for_each(|v| *v /= f32::from(downsample_factor));
             // And send out
-            stokes_send.send(avg).unwrap();
+            if let Ok(_) = stokes_send.try_send(avg) {
+                // We don't care if this gets backed up, that's upstream's problem
+            }
         }
         // Increment the idx
         idx = (idx + 1) % downsample_factor as usize;

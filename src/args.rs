@@ -13,6 +13,9 @@ pub struct Cli {
     #[arg(long, short)]
     pub tui: bool,
     /// Downsample factor
-    #[arg(default_value_t = 16)]
+    #[arg(long, short, default_value_t = 16)]
     pub downsample: u16,
+    /// Voltage buffer size. Defaults to ~4.3 seconds
+    #[arg(long, short, default_value_t = 524288)]
+    pub vbuf_size: usize,
 }

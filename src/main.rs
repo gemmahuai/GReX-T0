@@ -40,7 +40,7 @@ fn main() {
     // Start the threads
     let process_thread = ThreadBuilder::default()
         .name("Process")
-        .priority(ThreadPriority::Max)
+        .priority(ThreadPriority::Crossplatform(20.try_into().unwrap()))
         .spawn(move |result| {
             assert!(result.is_ok());
             downsample_thread(&payload_rcv, &stokes_snd, cli.downsample);
@@ -48,7 +48,7 @@ fn main() {
         .unwrap();
     let monitor_thread = ThreadBuilder::default()
         .name("Monitoring")
-        .priority(ThreadPriority::Max)
+        .priority(ThreadPriority::Crossplatform(20.try_into().unwrap()))
         .spawn(move |result| {
             assert!(result.is_ok());
             monitor_task(&stat_rcv, &all_chans);
@@ -56,7 +56,7 @@ fn main() {
         .unwrap();
     let dummy_thread = ThreadBuilder::default()
         .name("Dummy exfil")
-        .priority(ThreadPriority::Max)
+        .priority(ThreadPriority::Crossplatform(20.try_into().unwrap()))
         .spawn(move |result| {
             assert!(result.is_ok());
             exfil::dummy_consumer(&stokes_rcv);
@@ -64,7 +64,7 @@ fn main() {
         .unwrap();
     let cap_thread = ThreadBuilder::default()
         .name("Packet capture")
-        .priority(ThreadPriority::Max)
+        .priority(ThreadPriority::Crossplatform(20.try_into().unwrap()))
         .spawn(move |result| {
             assert!(result.is_ok());
             pcap_task(cap, &payload_snd, &stat_snd);

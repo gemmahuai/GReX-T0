@@ -88,6 +88,7 @@ impl Capture {
     pub fn next_payload(&mut self) -> Option<Payload> {
         let pak = self.0.next_packet().ok()?;
         if pak.data.len() != PAYLOAD_SIZE {
+            println!("Wrong size - {}", pak.data.len());
             return None;
         }
         Some(Payload::from_bytes(&pak.data[UDP_HEADER_SIZE..]))

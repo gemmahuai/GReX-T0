@@ -97,7 +97,6 @@ impl Capture {
         println!("Starting capture task!");
         let mut count = 0;
         loop {
-            println!("{count}");
             if count == STAT_PACKET_INTERVAL {
                 count = 0;
                 stat_sender

@@ -21,6 +21,7 @@ const STAT_PACKET_INTERVAL: usize = 500_000;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
+    #[allow(clippy::cast_possible_wrap)]
     fn from_bytes(bytes: &[u8]) -> Self {
         let mut payload = Payload::default();
         for (i, word) in bytes[TIMESTAMP_SIZE..].chunks_exact(WORD_SIZE).enumerate() {
@@ -45,20 +46,22 @@ impl Payload {
 pub struct Capture(pcap::Capture<pcap::Active>);
 
 impl Capture {
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn new(device_name: &str, port: u16) -> Self {
         // Grab the pcap device that matches this interface
         let device = pcap::Device::list()
             .expect("Error listing devices from Pcap")
             .into_iter()
             .find(|d| d.name == device_name)
-            .unwrap_or_else(|| panic!("Device named {} not found", device_name));
+            .unwrap_or_else(|| panic!("Device named {device_name} not found"));
         // Create the "capture"
         let mut cap = pcap::Capture::from_device(device)
             .expect("Failed to create capture")
             .open()
             .expect("Failed to open the capture");
         // Add the port filter
-        cap.filter(&format!("dst port {}", port), true)
+        cap.filter(&format!("dst port {port}"), true)
             .expect("Error creating port filter");
         // And return
         Capture(cap)
@@ -73,10 +76,11 @@ impl Capture {
     }
 }
 
-pub fn capture_task(
+#[allow(clippy::missing_panics_doc)]
+pub fn pcap_task(
     mut cap: Capture,
-    payload_sender: Sender<Payload>,
-    stat_sender: Sender<Stat>,
+    payload_sender: &Sender<Payload>,
+    stat_sender: &Sender<Stat>,
 ) -> ! {
     println!("Starting capture task!");
     let mut count = 0;

@@ -14,5 +14,5 @@ pub struct Cli {
     pub tui: bool,
     /// Downsample factor
     #[arg(default_value_t = 16)]
-    pub downsample: usize,
+    pub downsample: u16,
 }

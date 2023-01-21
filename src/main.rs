@@ -18,6 +18,19 @@ use thread_priority::{ThreadBuilder, ThreadPriority};
 
 const THREAD_CHAN_SIZE: usize = 1000;
 
+macro_rules! priority_thread_spawn {
+    ($thread_name:literal, $fcall:expr) => {
+        ThreadBuilder::default()
+            .name($thread_name)
+            .priority(ThreadPriority::Crossplatform(95.try_into().unwrap()))
+            .spawn(move |result| {
+                assert!(result.is_ok());
+                $fcall;
+            })
+            .unwrap()
+    };
+}
+
 fn main() {
     // Get the CLI options
     let cli = args::Cli::parse();
@@ -38,42 +51,17 @@ fn main() {
     };
 
     // Start the threads
-    let process_thread = ThreadBuilder::default()
-        .name("Process")
-        .priority(ThreadPriority::Crossplatform(20.try_into().unwrap()))
-        .spawn(move |result| {
-            assert!(result.is_ok());
-            downsample_thread(&payload_rcv, &stokes_snd, cli.downsample);
-        })
-        .unwrap();
-    let monitor_thread = ThreadBuilder::default()
-        .name("Monitoring")
-        .priority(ThreadPriority::Crossplatform(0.try_into().unwrap()))
-        .spawn(move |result| {
-            assert!(result.is_ok());
-            monitor_task(&stat_rcv, &all_chans);
-        })
-        .unwrap();
-    let dummy_thread = ThreadBuilder::default()
-        .name("Dummy exfil")
-        .priority(ThreadPriority::Crossplatform(0.try_into().unwrap()))
-        .spawn(move |result| {
-            assert!(result.is_ok());
-            exfil::dummy_consumer(&stokes_rcv);
-        })
-        .unwrap();
-    let cap_thread = ThreadBuilder::default()
-        .name("Packet capture")
-        .priority(ThreadPriority::Crossplatform(0.try_into().unwrap()))
-        .spawn(move |result| {
-            assert!(result.is_ok());
-            pcap_task(cap, &payload_snd, &stat_snd);
-        })
-        .unwrap();
+    let process_thread = priority_thread_spawn!(
+        "downsample",
+        downsample_thread(&payload_rcv, &stokes_snd, cli.downsample)
+    );
+    let monitor_thread = priority_thread_spawn!("monitor", monitor_task(&stat_rcv, &all_chans));
+    let dummy_thread = priority_thread_spawn!("dummy", exfil::dummy_consumer(&stokes_rcv));
+    let capture_thread = priority_thread_spawn!("capture", pcap_task(cap, &payload_snd, &stat_snd));
 
     // Join the threads into the main task once they bail
     process_thread.join().unwrap();
     monitor_thread.join().unwrap();
-    cap_thread.join().unwrap();
+    capture_thread.join().unwrap();
     dummy_thread.join().unwrap();
 }

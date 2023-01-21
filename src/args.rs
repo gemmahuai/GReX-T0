@@ -12,4 +12,7 @@ pub struct Cli {
     /// Whether to display a TUI
     #[arg(long, short)]
     pub tui: bool,
+    /// Downsample factor
+    #[arg(default_value_t = 16)]
+    pub downsample: usize,
 }

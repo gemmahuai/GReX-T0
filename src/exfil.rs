@@ -1,7 +1,7 @@
-use crate::common::Payload;
+use crate::processing::Stokes;
 use crossbeam_channel::Receiver;
 
-pub fn dummy_consumer(receiver: Receiver<Payload>) {
+pub fn dummy_consumer(receiver: Receiver<Stokes>) {
     loop {
         receiver.recv().unwrap();
     }

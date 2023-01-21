@@ -22,3 +22,14 @@ impl Default for Payload {
         }
     }
 }
+
+impl Payload {
+    /// Calculate the Stokes-I parameter for this payload
+    pub fn stokes_i(&self) -> [u16; CHANNELS] {
+        let mut stokes = [0u16; CHANNELS];
+        for (i, (a, b)) in self.pol_a.into_iter().zip(self.pol_b).enumerate() {
+            stokes[i] = ((a.re as i16 * a.im as i16) + (b.re as i16 * b.im as i16)) as u16;
+        }
+        stokes
+    }
+}

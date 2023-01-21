@@ -1,6 +1,6 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
-use crate::common::{Payload, CHANNELS};
+use crate::common::Payload;
 use crossbeam_channel::Sender;
 use num_complex::Complex;
 use pcap::Stat;
@@ -39,11 +39,6 @@ impl Payload {
                 .expect("This is exactly 8 bytes"),
         );
         payload
-    }
-
-    /// Calculate the Stokes-I parameter for this payload
-    fn stokes_i(&self) -> [Complex<i8>; CHANNELS] {
-        todo!()
     }
 }
 

@@ -15,7 +15,7 @@ const SPECTRA_SIZE: usize = 8192;
 /// Total UDP payload size
 const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 /// How many packets before we send statistics information to another thread
-const STAT_PACKET_INTERVAL: usize = 1_000;
+const STAT_PACKET_INTERVAL: usize = 1_000_000;
 
 #[derive(Debug)]
 pub struct Payload {

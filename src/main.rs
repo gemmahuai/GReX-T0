@@ -23,7 +23,7 @@ fn main() {
     // Create the capture
     let cap = capture::Capture::new(&cli.cap_interface, cli.cap_port);
     // Create the payload channel
-    let (payload_snd, payload_rcv) = bounded(THREAD_CHAN_SIZE);
+    let (payload_snd, payload_rcv) = bounded(1000000);
     // Create the capture statistics channel
     let (stat_snd, stat_rcv) = bounded(THREAD_CHAN_SIZE);
     // Create the stokes channel (downsampled)

@@ -13,3 +13,7 @@ tui = "0.19"
 crossterm = "0.25"
 crossbeam-channel = "0.5"
 thread-priority = "0.10.0"
+
+# So we can flamegraph, we don't care abt code size
+[profile.release]
+debug = 1

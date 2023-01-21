@@ -1,8 +1,10 @@
 pub mod args;
 pub mod capture;
+pub mod common;
 pub mod exfil;
 pub mod monitoring;
 
+use capture::capture_task;
 use clap::Parser;
 use crossbeam_channel::bounded;
 use monitoring::monitor_task;
@@ -21,7 +23,7 @@ fn main() {
     // Start the monitoring thread
     let mon_thread = std::thread::spawn(move || monitor_task(sr));
     // Start the capture thread
-    let cap_thread = std::thread::spawn(move || cap.capture_task(ps, ss));
+    let cap_thread = std::thread::spawn(move || capture_task(cap, ps, ss));
     // Start a dummy exfil
     let dummy = std::thread::spawn(move || exfil::dummy_consumer(pr));
 

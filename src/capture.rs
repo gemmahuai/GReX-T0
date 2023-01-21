@@ -1,9 +1,10 @@
+//! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
+
+use crate::common::{Payload, CHANNELS};
 use crossbeam_channel::Sender;
 use num_complex::Complex;
 use pcap::Stat;
 
-/// Number of frequency channels (set by gateware)
-const CHANNELS: usize = 2048;
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
 const WORD_SIZE: usize = 8;
 /// Size of the packet count header
@@ -15,25 +16,8 @@ const SPECTRA_SIZE: usize = 8192;
 /// Total UDP payload size
 const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 /// How many packets before we send statistics information to another thread
-const STAT_PACKET_INTERVAL: usize = 1_000_000;
-
-#[derive(Debug)]
-pub struct Payload {
-    /// Number of packets since the first packet
-    count: u64,
-    pol_a: [Complex<i8>; CHANNELS],
-    pol_b: [Complex<i8>; CHANNELS],
-}
-
-impl Default for Payload {
-    fn default() -> Self {
-        Self {
-            count: Default::default(),
-            pol_a: [Complex::new(0, 0); CHANNELS],
-            pol_b: [Complex::new(0, 0); CHANNELS],
-        }
-    }
-}
+/// This should be around ~4s
+const STAT_PACKET_INTERVAL: usize = 500_000;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
@@ -85,30 +69,34 @@ impl Capture {
         Capture(cap)
     }
 
-    pub fn next_payload(&mut self) -> Option<Payload> {
+    fn next_payload(&mut self) -> Option<Payload> {
         let pak = self.0.next_packet().ok()?;
         if pak.data.len() != (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
             return None;
         }
         Some(Payload::from_bytes(&pak.data[UDP_HEADER_SIZE..]))
     }
+}
 
-    pub fn capture_task(mut self, payload_sender: Sender<Payload>, stat_sender: Sender<Stat>) -> ! {
-        println!("Starting capture task!");
-        let mut count = 0;
-        loop {
-            if count == STAT_PACKET_INTERVAL {
-                count = 0;
-                stat_sender
-                    .send(self.0.stats().expect("Getting capture statistics failed"))
-                    .expect("Sending capture statistics failed");
-            }
-            if let Some(payload) = self.next_payload() {
-                payload_sender
-                    .send(payload)
-                    .expect("Sending packets failed");
-                count += 1;
-            }
+pub fn capture_task(
+    mut cap: Capture,
+    payload_sender: Sender<Payload>,
+    stat_sender: Sender<Stat>,
+) -> ! {
+    println!("Starting capture task!");
+    let mut count = 0;
+    loop {
+        if count == STAT_PACKET_INTERVAL {
+            count = 0;
+            stat_sender
+                .send(cap.0.stats().expect("Getting capture statistics failed"))
+                .expect("Sending capture statistics failed");
+        }
+        if let Some(payload) = cap.next_payload() {
+            payload_sender
+                .send(payload)
+                .expect("Sending packets failed");
+            count += 1;
         }
     }
 }

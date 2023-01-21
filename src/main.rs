@@ -10,11 +10,12 @@ pub mod processing;
 
 use capture::pcap_task;
 use clap::Parser;
+use common::AllChans;
 use crossbeam_channel::bounded;
 use monitoring::monitor_task;
 use processing::downsample_thread;
 
-const THREAD_CHAN_SIZE: usize = 0;
+const THREAD_CHAN_SIZE: usize = 100;
 
 fn main() {
     // Get the CLI options
@@ -27,11 +28,19 @@ fn main() {
     let (stat_snd, stat_rcv) = bounded(THREAD_CHAN_SIZE);
     // Create the stokes channel (downsampled)
     let (stokes_snd, stokes_rcv) = bounded(THREAD_CHAN_SIZE);
+
+    // Create the collection of channels that we can monitor
+    let all_chans = AllChans {
+        payload: payload_snd.clone(),
+        stat: stat_snd.clone(),
+        stokes: stokes_snd.clone(),
+    };
+
     // Start the processing thread
     let process_thread =
         std::thread::spawn(move || downsample_thread(&payload_rcv, &stokes_snd, cli.downsample));
     // Start the monitoring thread
-    let mon_thread = std::thread::spawn(move || monitor_task(&stat_rcv));
+    let mon_thread = std::thread::spawn(move || monitor_task(&stat_rcv, &all_chans));
     // Start a dummy exfil
     let dummy = std::thread::spawn(move || exfil::dummy_consumer(&stokes_rcv));
     // And finally kick things off by starting the capture thread

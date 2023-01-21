@@ -1,4 +1,4 @@
-use crate::processing::Stokes;
+use crate::common::Stokes;
 use crossbeam_channel::Receiver;
 
 #[allow(clippy::missing_panics_doc)]

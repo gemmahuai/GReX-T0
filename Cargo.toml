@@ -7,7 +7,7 @@ edition = "2021"
 clap = { version = "=4.0", features = ["derive"] }
 # Pinned because MSRV
 clap_lex = "=0.3.0"
-num-complex = { version = "0.4", features = ["rand"] }
+num-complex =  "0.4"
 pcap = "1"
 tui = "0.19"
 crossterm = "0.25"

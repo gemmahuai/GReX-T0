@@ -1,9 +1,13 @@
 //! Common types shared between tasks
 
+use crossbeam_channel::Sender;
 use num_complex::Complex;
+use pcap::Stat;
 
 /// Number of frequency channels (set by gateware)
 pub const CHANNELS: usize = 2048;
+
+pub type Stokes = [f32; CHANNELS];
 
 #[derive(Debug, Copy, Clone)]
 pub struct Payload {
@@ -11,6 +15,13 @@ pub struct Payload {
     pub count: u64,
     pub pol_a: [Complex<i8>; CHANNELS],
     pub pol_b: [Complex<i8>; CHANNELS],
+}
+
+#[derive(Debug)]
+pub struct AllChans {
+    pub payload: Sender<Payload>,
+    pub stat: Sender<Stat>,
+    pub stokes: Sender<Stokes>,
 }
 
 impl Default for Payload {

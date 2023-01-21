@@ -1,7 +1,7 @@
-use crate::common::{Payload, CHANNELS};
-use crossbeam_channel::{Receiver, Sender};
+//! Inter-thread processing (downsampling, voltage ring buffer, etc)
 
-pub type Stokes = [f32; CHANNELS];
+use crate::common::{Payload, Stokes, CHANNELS};
+use crossbeam_channel::{Receiver, Sender};
 
 #[allow(clippy::missing_panics_doc)]
 pub fn downsample_thread(

@@ -1,138 +1,113 @@
-use crate::if_packet::*;
-use nix::{
-    libc::{setsockopt, sockaddr_ll, SOL_PACKET},
-    sys::{
-        mman::{mmap, munmap, MapFlags, ProtFlags},
-        socket::{socket, AddressFamily, SockFlag, SockProtocol, SockType},
-    },
-    unistd::{close, sysconf, SysconfVar},
-};
-use std::{
-    ffi::{c_uint, c_void},
-    mem::size_of,
-    num::NonZeroUsize,
-    os::fd::RawFd,
-};
+use crossbeam_channel::Sender;
+use num_complex::Complex;
+use pcap::Stat;
 
-/// The number of frames in the ring
-const CONF_RING_FRAMES: usize = 128;
-const ETH_HLEN: u32 = 14;
-const fn tpacket_align(x: u32) -> u32 {
-    ((x) + TPACKET_ALIGNMENT - 1) & !(TPACKET_ALIGNMENT - 1)
-}
-const TPACKET3_HDRLEN: u32 =
-    tpacket_align(size_of::<tpacket3_hdr>() as u32) + size_of::<sockaddr_ll>() as u32;
+/// Number of frequency channels (set by gateware)
+const CHANNELS: usize = 2048;
+/// FPGA UDP "Word" size (8 bytes as per CASPER docs)
+const WORD_SIZE: usize = 8;
+/// Size of the packet count header
+const TIMESTAMP_SIZE: usize = 8;
+// UDP Header size (spec-defined)
+const UDP_HEADER_SIZE: usize = 42;
+/// Total number of bytes in the spectra block of the UDP payload
+const SPECTRA_SIZE: usize = 8192;
+/// Total UDP payload size
+const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
+/// How many packets before we send statistics information to another thread
+const STAT_PACKET_INTERVAL: usize = 1_000_000;
 
-pub struct UdpCap {
-    fd: RawFd,
-    req: tpacket_req3,
-    frame_idx: usize,
-    frame_ptr: *mut u8,
-    rx_ring: *mut u8,
+#[derive(Debug)]
+pub struct Payload {
+    /// Number of packets since the first packet
+    count: u64,
+    pol_a: [Complex<i8>; CHANNELS],
+    pol_b: [Complex<i8>; CHANNELS],
 }
 
-impl UdpCap {
-    pub fn new(mtu: usize) -> Self {
-        // Create the AF_PACKET socket file descriptor
-        let fd = socket(
-            AddressFamily::Packet,
-            SockType::Datagram,
-            SockFlag::empty(),
-            SockProtocol::Udp,
-        )
-        .expect("Creating the raw socket failed");
-        // Set the socket option to use TPACKET_V3
-        let v = tpacket_versions_TPACKET_V3;
-        if unsafe {
-            setsockopt(
-                fd,
-                SOL_PACKET,
-                PACKET_VERSION.try_into().unwrap(),
-                &v as *const _ as *const c_void,
-                size_of::<u32>() as u32,
-            )
-        } == -1
-        {
-            panic!(
-                "Setting the PACKET_VERSION to TPACKET_V3 failed: {:#?}",
-                std::io::Error::last_os_error()
-            );
-        }
-
-        // Frames will be header + MTU
-        let frame_size =
-            (tpacket_align(TPACKET3_HDRLEN + ETH_HLEN) + tpacket_align(mtu as u32)) as c_uint;
-        // Blocks are the smallest power of two multiple of the page size that is at least the frame size
-        let page_size = sysconf(SysconfVar::PAGE_SIZE)
-            .expect("Unable to get the page size")
-            .unwrap() as u32;
-        let block_size = (frame_size / page_size + 1).next_power_of_two() * page_size;
-        let block_number = CONF_RING_FRAMES as u32;
-        let frame_number = (block_number * block_size) / frame_size;
-
-        // Start to set up the ring buffer request
-        let req = tpacket_req3 {
-            tp_block_size: block_size,
-            tp_block_nr: block_number,
-            tp_frame_size: frame_size,
-            tp_frame_nr: frame_number,
-            tp_retire_blk_tov: 60,
-            tp_sizeof_priv: 0,
-            tp_feature_req_word: TP_FT_REQ_FILL_RXHASH,
-        };
-
-        dbg!(&req);
-
-        // Safety: FD is valid because we've used a safe API, req exists, and we're checking the return
-        if unsafe {
-            setsockopt(
-                fd,
-                SOL_PACKET,
-                PACKET_RX_RING.try_into().unwrap(),
-                &req as *const _ as *const c_void,
-                size_of::<tpacket_req3>() as u32,
-            )
-        } == -1
-        {
-            panic!(
-                "Setting the PACKET_RX_RING option failed: {:#?}",
-                std::io::Error::last_os_error()
-            );
-        }
-        // Now memmory-map the ring into this process
-        let rx_ring = unsafe {
-            mmap(
-                None,
-                NonZeroUsize::new((block_number * block_size) as usize).unwrap(),
-                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                MapFlags::MAP_SHARED | MapFlags::MAP_LOCKED,
-                fd,
-                0,
-            )
-            .expect("Creating the mmap-ed ring buffer failed") as *mut u8
-        };
-
+impl Default for Payload {
+    fn default() -> Self {
         Self {
-            fd,
-            req,
-            frame_idx: 0,
-            frame_ptr: rx_ring,
-            rx_ring,
+            count: Default::default(),
+            pol_a: [Complex::new(0, 0); CHANNELS],
+            pol_b: [Complex::new(0, 0); CHANNELS],
         }
     }
 }
 
-impl Drop for UdpCap {
-    fn drop(&mut self) {
-        // Cleanup the mmap
-        unsafe {
-            munmap(
-                self.rx_ring as *mut c_void,
-                (self.req.tp_block_nr * self.req.tp_block_size) as usize,
-            )
-            .expect("Failed un un-mmap the ring buffer")
-        };
-        // Close the socket (although this might also close the mmap, not sure)
-        close(self.fd).expect("Failed to close socket fd")
+impl Payload {
+    /// Construct a payload instance from a raw UDP payload
+    fn from_bytes(bytes: &[u8]) -> Self {
+        let mut payload = Payload::default();
+        for (i, word) in bytes[TIMESTAMP_SIZE..].chunks_exact(WORD_SIZE).enumerate() {
+            // Each word contains two frequencies for each polarization
+            // [A1 B1 A2 B2]
+            // Where each channel is [Re Im] as FixedI8<7>
+            payload.pol_a[2 * i] = Complex::new(word[0] as i8, word[1] as i8);
+            payload.pol_a[2 * i + 1] = Complex::new(word[4] as i8, word[5] as i8);
+            payload.pol_b[2 * i] = Complex::new(word[2] as i8, word[3] as i8);
+            payload.pol_b[2 * i + 1] = Complex::new(word[6] as i8, word[7] as i8);
+        }
+        // Then unpack the timestamp/order
+        payload.count = u64::from_be_bytes(
+            bytes[0..TIMESTAMP_SIZE]
+                .try_into()
+                .expect("This is exactly 8 bytes"),
+        );
+        payload
+    }
+
+    /// Calculate the Stokes-I parameter for this payload
+    fn stokes_i(&self) -> [Complex<i8>; CHANNELS] {
+        todo!()
+    }
+}
+
+pub struct Capture(pcap::Capture<pcap::Active>);
+
+impl Capture {
+    pub fn new(device_name: &str, port: u16) -> Self {
+        // Grab the pcap device that matches this interface
+        let device = pcap::Device::list()
+            .expect("Error listing devices from Pcap")
+            .into_iter()
+            .find(|d| d.name == device_name)
+            .unwrap_or_else(|| panic!("Device named {} not found", device_name));
+        // Create the "capture"
+        let mut cap = pcap::Capture::from_device(device)
+            .expect("Failed to create capture")
+            .open()
+            .expect("Failed to open the capture");
+        // Add the port filter
+        cap.filter(&format!("dst port {}", port), true)
+            .expect("Error creating port filter");
+        // And return
+        Capture(cap)
+    }
+
+    pub fn next_payload(&mut self) -> Option<Payload> {
+        let pak = self.0.next_packet().ok()?;
+        if pak.data.len() != PAYLOAD_SIZE {
+            return None;
+        }
+        Some(Payload::from_bytes(&pak.data[UDP_HEADER_SIZE..]))
+    }
+
+    pub fn capture_task(mut self, payload_sender: Sender<Payload>, stat_sender: Sender<Stat>) -> ! {
+        let mut count = 0;
+        loop {
+            if count == STAT_PACKET_INTERVAL {
+                count = 0;
+                stat_sender
+                    .send(self.0.stats().expect("Getting capture statistics failed"))
+                    .expect("Sending capture statistics failed");
+            }
+            if let Some(payload) = self.next_payload() {
+                payload_sender
+                    .send(payload)
+                    .expect("Sending packets failed");
+                count += 1;
+            }
+        }
     }
 }

@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nix = "0.26.2"
-
-[build-dependencies]
-bindgen = "0.53.1"
+clap = { version = "4", features = ["derive"] }
+num-complex = { version = "0.4", features = ["rand"] }
+pcap = "1"
+tui = "0.19"
+crossterm = "0.25"
+crossbeam-channel = "0.5"

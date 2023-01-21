@@ -94,7 +94,7 @@ pub fn pcap_task(
         if let Some(payload) = cap.next_payload() {
             payload_sender
                 .try_send(payload)
-                .expect("Sending packets failed - channel full???");
+                .expect("Sending packets failed - channel full");
             count += 1;
         }
     }

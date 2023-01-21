@@ -15,7 +15,7 @@ use crossbeam_channel::bounded;
 use monitoring::monitor_task;
 use processing::downsample_thread;
 
-const THREAD_CHAN_SIZE: usize = 100;
+const THREAD_CHAN_SIZE: usize = 1000;
 
 fn main() {
     // Get the CLI options
@@ -23,7 +23,7 @@ fn main() {
     // Create the capture
     let cap = capture::Capture::new(&cli.cap_interface, cli.cap_port);
     // Create the payload channel
-    let (payload_snd, payload_rcv) = bounded(1000000);
+    let (payload_snd, payload_rcv) = bounded(THREAD_CHAN_SIZE);
     // Create the capture statistics channel
     let (stat_snd, stat_rcv) = bounded(THREAD_CHAN_SIZE);
     // Create the stokes channel (downsampled)

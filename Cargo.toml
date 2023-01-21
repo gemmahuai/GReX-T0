@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "=4.0.0", features = ["derive"] }
+clap = { version = "=4.0", features = ["derive"] }
+# Pinned because MSRV
+clap_lex = "=0.3.0"
 num-complex = { version = "0.4", features = ["rand"] }
 pcap = "1"
 tui = "0.19"

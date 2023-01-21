@@ -92,10 +92,12 @@ pub fn pcap_task(
                 .expect("Sending capture statistics failed");
         }
         if let Some(payload) = cap.next_payload() {
-            payload_sender
-                .try_send(payload)
-                .expect("Sending packets failed - channel full");
-            count += 1;
+            match payload_sender.try_send(payload) {
+                Ok(_) => count += 1,
+                Err(_) => {
+                    eprintln!("Dropping packets - send buffer full");
+                }
+            }
         }
     }
 }

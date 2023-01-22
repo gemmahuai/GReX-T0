@@ -58,6 +58,7 @@ impl Capture {
         // Create the "capture"
         let mut cap = pcap::Capture::from_device(device)
             .expect("Failed to create capture")
+            .buffer_size(16_777_216) // Up to 10ms
             .open()
             .expect("Failed to open the capture")
             .setnonblock()
@@ -75,13 +76,13 @@ impl Capture {
             Err(_) => return None,
         };
         if pak.data.len() != (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
-            return None;
+            None
         } else {
-            return Some(
+            Some(
                 pak.data[UDP_HEADER_SIZE..]
                     .try_into()
                     .expect("We've already checked the size"),
-            );
+            )
         }
     }
 }

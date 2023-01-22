@@ -1,7 +1,7 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
 use crate::common::Payload;
-use crossbeam_channel::Sender;
+use crossbeam_channel::{Receiver, Sender};
 use num_complex::Complex;
 use pcap::Stat;
 
@@ -67,19 +67,26 @@ impl Capture {
         Capture(cap)
     }
 
-    fn next_payload(&mut self) -> Option<Payload> {
+    fn next_payload(&mut self) -> Option<RawPacket> {
         let pak = self.0.next_packet().ok()?;
         if pak.data.len() != (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
             return None;
+        } else {
+            return Some(
+                pak.data[UDP_HEADER_SIZE..]
+                    .try_into()
+                    .expect("We've already checked the size"),
+            );
         }
-        Some(Payload::from_bytes(&pak.data[UDP_HEADER_SIZE..]))
     }
 }
+
+pub type RawPacket = [u8; PAYLOAD_SIZE];
 
 #[allow(clippy::missing_panics_doc)]
 pub fn pcap_task(
     mut cap: Capture,
-    payload_sender: &Sender<Payload>,
+    packet_sender: &Sender<RawPacket>,
     stat_sender: &Sender<Stat>,
 ) -> ! {
     println!("Starting capture task!");
@@ -94,9 +101,18 @@ pub fn pcap_task(
             }
         }
         if let Some(payload) = cap.next_payload() {
-            if payload_sender.try_send(payload).is_ok() {
+            if packet_sender.try_send(payload).is_ok() {
                 count += 1;
             }
+        }
+    }
+}
+
+pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sender<Payload>) -> ! {
+    loop {
+        let raw_packet = packet_receiver.recv().unwrap();
+        if let Ok(_) = payload_sender.try_send(Payload::from_bytes(&raw_packet)) {
+            // If this channel backs up, we don't care, drop packets upstream
         }
     }
 }

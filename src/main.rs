@@ -17,6 +17,8 @@ use monitoring::monitor_task;
 use processing::downsample_thread;
 use thread_priority::{ThreadBuilder, ThreadPriority};
 
+use crate::capture::decode_task;
+
 const THREAD_CHAN_SIZE: usize = 1000;
 
 macro_rules! priority_thread_spawn {
@@ -40,6 +42,7 @@ fn main() {
     let cap = capture::Capture::new(&cli.cap_interface, cli.cap_port);
 
     // Create all the channels
+    let (packet_snd, packet_rcv) = bounded(THREAD_CHAN_SIZE);
     let (payload_snd, payload_rcv) = bounded(THREAD_CHAN_SIZE);
     let (stat_snd, stat_rcv) = bounded(THREAD_CHAN_SIZE);
     let (stokes_snd, stokes_rcv) = bounded(THREAD_CHAN_SIZE);
@@ -58,11 +61,13 @@ fn main() {
     );
     let monitor_thread = priority_thread_spawn!("monitor", monitor_task(&stat_rcv, &all_chans));
     let dummy_thread = priority_thread_spawn!("dummy", exfil::dummy_consumer(&stokes_rcv));
-    let capture_thread = priority_thread_spawn!("capture", pcap_task(cap, &payload_snd, &stat_snd));
+    let decode_thread = priority_thread_spawn!("decode", decode_task(&packet_rcv, &payload_snd));
+    let capture_thread = priority_thread_spawn!("capture", pcap_task(cap, &packet_snd, &stat_snd));
 
     // Join the threads into the main task once they bail
     process_thread.join().unwrap();
     monitor_thread.join().unwrap();
     capture_thread.join().unwrap();
     dummy_thread.join().unwrap();
+    decode_thread.join().unwrap();
 }

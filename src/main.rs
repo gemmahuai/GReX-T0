@@ -12,6 +12,7 @@ use grex_t0::{
     processing::downsample_thread,
     tui::Tui,
 };
+use log::LevelFilter;
 pub use thread_priority::{ThreadBuilder, ThreadPriority};
 
 macro_rules! priority_thread_spawn {
@@ -32,7 +33,9 @@ fn main() -> anyhow::Result<()> {
     let cli = args::Cli::parse();
 
     // Only log to stdout if we're not tui-ing
-    if !cli.tui {
+    if cli.tui {
+        tui_logger::init_logger(LevelFilter::Trace).expect("Couldn't setup the tui logger");
+    } else {
         pretty_env_logger::init();
     }
 

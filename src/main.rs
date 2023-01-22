@@ -34,7 +34,7 @@ fn main() -> anyhow::Result<()> {
     // Construct a subscriber that prints formatted traces to stdout
     let subscriber = tracing_subscriber::fmt()
         .compact()
-        .with_thread_ids(true)
+        .with_thread_names(true)
         .with_target(false)
         .finish();
 

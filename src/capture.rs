@@ -4,6 +4,7 @@ use crate::common::Payload;
 use crossbeam_channel::{Receiver, Sender};
 use num_complex::Complex;
 use pcap::Stat;
+use tracing::{info, warn};
 
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
 const WORD_SIZE: usize = 8;
@@ -96,7 +97,7 @@ pub fn pcap_task(
     packet_sender: &Sender<RawPacket>,
     stat_sender: &Sender<Stat>,
 ) -> ! {
-    println!("Starting capture task!");
+    info!("Starting capture task!");
     let mut count = 0;
     loop {
         if count == STAT_PACKET_INTERVAL {
@@ -106,11 +107,15 @@ pub fn pcap_task(
                 .is_ok()
             {
                 // We don't care about dropping stats, we *do* care about dropping packets
+            } else {
+                warn!("Stats channel backed up");
             }
         }
         if let Some(payload) = cap.next_payload() {
             if packet_sender.try_send(payload).is_ok() {
                 count += 1;
+            } else {
+                warn!("Packet channel backed up");
             }
         }
     }
@@ -124,6 +129,8 @@ pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sende
         };
         if payload_sender.try_send(Payload::from_bytes(&v)).is_ok() {
             // If this channel backs up, we don't care, drop packets upstream
+        } else {
+            warn!("Payload channel backed up");
         }
     }
 }

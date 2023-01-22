@@ -9,7 +9,7 @@ pub fn downsample_thread(
     stokes_send: &Sender<Stokes>,
     downsample_factor: u16,
 ) {
-    println!("Starting downsample task");
+    info!("Starting downsample task");
     // Preallocate averaging vector
     let mut avg_buf = vec![[0u16; CHANNELS]; downsample_factor as usize];
     let mut idx = 0usize;

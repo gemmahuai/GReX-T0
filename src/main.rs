@@ -31,8 +31,17 @@ fn main() -> anyhow::Result<()> {
     // Get the CLI options
     let cli = args::Cli::parse();
 
+    // Construct a subscriber that prints formatted traces to stdout
+    let subscriber = tracing_subscriber::fmt()
+        .compact()
+        .with_thread_ids(true)
+        .with_target(false)
+        .finish();
+
     // Create the capture
     let cap = Capture::new(&cli.cap_interface, cli.cap_port);
+    // Use that subscriber to process traces emitted after this point
+    tracing::subscriber::set_global_default(subscriber)?;
 
     // Create all the channels
     let (packet_snd, packet_rcv) = bounded(10_000);
@@ -60,7 +69,6 @@ fn main() -> anyhow::Result<()> {
 
     // Start the tui maybe (on the main thread)
     if cli.tui {
-        println!("Startin tui!");
         Tui::start()?;
     }
 

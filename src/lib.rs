@@ -10,3 +10,4 @@ pub mod dumps;
 pub mod exfil;
 pub mod monitoring;
 pub mod processing;
+pub mod tui;

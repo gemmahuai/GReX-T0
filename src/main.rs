@@ -10,6 +10,7 @@ use grex_t0::{
     exfil::dummy_consumer,
     monitoring::monitor_task,
     processing::downsample_thread,
+    tui::Tui,
 };
 pub use thread_priority::{ThreadBuilder, ThreadPriority};
 
@@ -26,7 +27,7 @@ macro_rules! priority_thread_spawn {
     };
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     // Get the CLI options
     let cli = args::Cli::parse();
 
@@ -57,10 +58,17 @@ fn main() {
     let decode_thread = priority_thread_spawn!("decode", decode_task(&packet_rcv, &payload_snd));
     let capture_thread = priority_thread_spawn!("capture", pcap_task(cap, &packet_snd, &stat_snd));
 
+    // Start the tui maybe (on the main thread)
+    if cli.tui {
+        Tui::start()?;
+    }
+
     // Join the threads into the main task once they bail
     process_thread.join().unwrap();
     monitor_thread.join().unwrap();
     capture_thread.join().unwrap();
     dummy_thread.join().unwrap();
     decode_thread.join().unwrap();
+
+    Ok(())
 }

@@ -15,6 +15,7 @@ crossterm = "0.25"
 # but I think crossbeam is good enough, and doesn't use unsafe
 crossbeam-channel = "0.5"
 thread-priority = "0.10.0"
+anyhow = "1"
 
 [lib]
 name = "grex_t0"

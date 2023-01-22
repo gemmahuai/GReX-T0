@@ -4,7 +4,7 @@ use crate::common::Payload;
 use crossbeam_channel::{Receiver, Sender};
 use num_complex::Complex;
 use pcap::Stat;
-use tracing::{info, warn};
+use log::{info, warn};
 
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
 const WORD_SIZE: usize = 8;

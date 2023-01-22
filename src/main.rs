@@ -31,17 +31,13 @@ fn main() -> anyhow::Result<()> {
     // Get the CLI options
     let cli = args::Cli::parse();
 
-    // Construct a subscriber that prints formatted traces to stdout
-    let subscriber = tracing_subscriber::fmt()
-        .compact()
-        .with_thread_names(true)
-        .with_target(false)
-        .finish();
+    // Only log to stdout if we're not tui-ing
+    if !cli.tui {
+        pretty_env_logger::init();
+    }
 
     // Create the capture
     let cap = Capture::new(&cli.cap_interface, cli.cap_port);
-    // Use that subscriber to process traces emitted after this point
-    tracing::subscriber::set_global_default(subscriber)?;
 
     // Create all the channels
     let (packet_snd, packet_rcv) = bounded(10_000);

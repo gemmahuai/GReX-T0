@@ -1,8 +1,8 @@
 use crate::common::AllChans;
 use crossbeam_channel::Receiver;
+use log::info;
 use pcap::Stat;
 use std::time::Instant;
-use tracing::info;
 
 #[allow(clippy::cast_precision_loss)]
 #[allow(clippy::similar_names)]

@@ -2,7 +2,7 @@
 
 use crate::common::{Payload, Stokes, CHANNELS};
 use crossbeam_channel::{Receiver, Sender};
-use tracing::info;
+use log::info;
 
 #[allow(clippy::missing_panics_doc)]
 pub fn downsample_thread(

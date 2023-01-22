@@ -58,6 +58,8 @@ fn main() -> anyhow::Result<()> {
     let decode_thread = priority_thread_spawn!("decode", decode_task(&packet_rcv, &payload_snd));
     let capture_thread = priority_thread_spawn!("capture", pcap_task(cap, &packet_snd, &stat_snd));
 
+    println!("{}", cli.tui);
+
     // Start the tui maybe (on the main thread)
     if cli.tui {
         println!("Startin tui!");

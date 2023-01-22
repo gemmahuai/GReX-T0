@@ -19,8 +19,6 @@ use thread_priority::{ThreadBuilder, ThreadPriority};
 
 use crate::capture::decode_task;
 
-const THREAD_CHAN_SIZE: usize = 1000;
-
 macro_rules! priority_thread_spawn {
     ($thread_name:literal, $fcall:expr) => {
         ThreadBuilder::default()
@@ -42,10 +40,10 @@ fn main() {
     let cap = capture::Capture::new(&cli.cap_interface, cli.cap_port);
 
     // Create all the channels
-    let (packet_snd, packet_rcv) = bounded(THREAD_CHAN_SIZE);
-    let (payload_snd, payload_rcv) = bounded(THREAD_CHAN_SIZE);
-    let (stat_snd, stat_rcv) = bounded(THREAD_CHAN_SIZE);
-    let (stokes_snd, stokes_rcv) = bounded(THREAD_CHAN_SIZE);
+    let (packet_snd, packet_rcv) = bounded(10_000);
+    let (payload_snd, payload_rcv) = bounded(10_000);
+    let (stat_snd, stat_rcv) = bounded(100);
+    let (stokes_snd, stokes_rcv) = bounded(100);
 
     // Create the collection of channels that we can monitor
     let all_chans = AllChans {

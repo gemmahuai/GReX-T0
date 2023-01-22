@@ -14,7 +14,7 @@ const UDP_HEADER_SIZE: usize = 42;
 /// Total number of bytes in the spectra block of the UDP payload
 const SPECTRA_SIZE: usize = 8192;
 /// Total UDP payload size
-const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
+pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 /// How many packets before we send statistics information to another thread
 /// This should be around ~4s
 const STAT_PACKET_INTERVAL: usize = 500_000;
@@ -22,7 +22,8 @@ const STAT_PACKET_INTERVAL: usize = 500_000;
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
     #[allow(clippy::cast_possible_wrap)]
-    fn from_bytes(bytes: &[u8]) -> Self {
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8]) -> Self {
         let mut payload = Payload::default();
         for (i, word) in bytes[TIMESTAMP_SIZE..].chunks_exact(WORD_SIZE).enumerate() {
             // Each word contains two frequencies for each polarization

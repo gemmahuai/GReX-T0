@@ -1,23 +1,17 @@
 #![deny(clippy::all)]
 #![warn(clippy::pedantic)]
 
-pub mod args;
-pub mod capture;
-pub mod common;
-pub mod dumps;
-pub mod exfil;
-pub mod monitoring;
-pub mod processing;
-
-use capture::pcap_task;
-use clap::Parser;
-use common::AllChans;
-use crossbeam_channel::bounded;
-use monitoring::monitor_task;
-use processing::downsample_thread;
-use thread_priority::{ThreadBuilder, ThreadPriority};
-
-use crate::capture::decode_task;
+pub use clap::Parser;
+pub use crossbeam_channel::bounded;
+use grex_t0::{
+    args,
+    capture::{decode_task, pcap_task, Capture},
+    common::AllChans,
+    exfil::dummy_consumer,
+    monitoring::monitor_task,
+    processing::downsample_thread,
+};
+pub use thread_priority::{ThreadBuilder, ThreadPriority};
 
 macro_rules! priority_thread_spawn {
     ($thread_name:literal, $fcall:expr) => {
@@ -37,7 +31,7 @@ fn main() {
     let cli = args::Cli::parse();
 
     // Create the capture
-    let cap = capture::Capture::new(&cli.cap_interface, cli.cap_port);
+    let cap = Capture::new(&cli.cap_interface, cli.cap_port);
 
     // Create all the channels
     let (packet_snd, packet_rcv) = bounded(10_000);
@@ -59,7 +53,7 @@ fn main() {
         downsample_thread(&payload_rcv, &stokes_snd, cli.downsample)
     );
     let monitor_thread = priority_thread_spawn!("monitor", monitor_task(&stat_rcv, &all_chans));
-    let dummy_thread = priority_thread_spawn!("dummy", exfil::dummy_consumer(&stokes_rcv));
+    let dummy_thread = priority_thread_spawn!("dummy", dummy_consumer(&stokes_rcv));
     let decode_thread = priority_thread_spawn!("decode", decode_task(&packet_rcv, &payload_snd));
     let capture_thread = priority_thread_spawn!("capture", pcap_task(cap, &packet_snd, &stat_snd));
 

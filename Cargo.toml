@@ -1,19 +1,37 @@
 [package]
 name = "grex-t0"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
 clap = { version = "=4.0", features = ["derive"] }
-# Pinned because MSRV
+# Pinned because MSRV, remove when Guix supports 1.64 and bump clap to 4.1
 clap_lex = "=0.3.0"
 num-complex =  "0.4"
 pcap = "1"
 tui = "0.19"
 crossterm = "0.25"
+# We could switch to kanal for faster spsc channels, 
+# but I think crossbeam is good enough, and doesn't use unsafe
 crossbeam-channel = "0.5"
 thread-priority = "0.10.0"
+
+[lib]
+name = "grex_t0"
+path = "src/lib.rs"
+
+[[bin]]
+name = "grex_t0"
+path = "src/main.rs"
+
+[[bench]]
+name = "benchmarks"
+harness = false
 
 # So we can flamegraph, we don't care abt code size
 [profile.release]
 debug = 1
+
+[dev-dependencies]
+criterion = "0.4"
+rand = "0.8"

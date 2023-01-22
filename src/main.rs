@@ -49,9 +49,10 @@ fn main() {
 
     // Create the collection of channels that we can monitor
     let all_chans = AllChans {
-        payload: payload_snd.clone(),
-        stat: stat_snd.clone(),
-        stokes: stokes_snd.clone(),
+        payload: payload_rcv.clone(),
+        stat: stat_rcv.clone(),
+        stokes: stokes_rcv.clone(),
+        packets: packet_rcv.clone(),
     };
 
     // Start the threads

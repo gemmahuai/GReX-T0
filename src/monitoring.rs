@@ -19,10 +19,11 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
         last_rcv = stat.received;
         last_drops = stat.dropped;
         println!(
-            "{pps} pps\t{dps} dps\t{} pb\t{} sb\t{} sb",
+            "{pps} pps\t{dps} dps\t{} pak\t{} stat\t{} stokes\t{}payload",
             all_chans.payload.len(),
             all_chans.stat.len(),
-            all_chans.stokes.len()
+            all_chans.stokes.len(),
+            all_chans.payload.len(),
         );
     }
 }

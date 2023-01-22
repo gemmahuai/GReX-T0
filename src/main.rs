@@ -60,6 +60,7 @@ fn main() -> anyhow::Result<()> {
 
     // Start the tui maybe (on the main thread)
     if cli.tui {
+        println!("Startin tui!");
         Tui::start()?;
     }
 

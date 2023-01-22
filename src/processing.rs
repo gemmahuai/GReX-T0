@@ -15,7 +15,10 @@ pub fn downsample_thread(
     let mut idx = 0usize;
     loop {
         // Busy wait on the next payload
-        let Ok(payload) = payload_recv.try_recv() else { continue };
+        let payload = match payload_recv.try_recv() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
         // Calculate stokes into the averaging buf
         avg_buf[idx] = payload.stokes_i();
         // If we're at the end, we're done

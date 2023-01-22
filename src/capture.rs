@@ -71,7 +71,10 @@ impl Capture {
     }
 
     fn next_payload(&mut self) -> Option<RawPacket> {
-        let Ok(p) = self.0.next_packet() else { return None };
+        let p = match self.0.next_packet() {
+            Ok(v) => v,
+            Err(_) => return None,
+        };
         if p.data.len() == (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
             Some(
                 p.data[UDP_HEADER_SIZE..]
@@ -114,7 +117,10 @@ pub fn pcap_task(
 
 pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sender<Payload>) -> ! {
     loop {
-        let Ok(v) = packet_receiver.try_recv() else { continue };
+        let v = match packet_receiver.try_recv() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
         if payload_sender.try_send(Payload::from_bytes(&v)).is_ok() {
             // If this channel backs up, we don't care, drop packets upstream
         }

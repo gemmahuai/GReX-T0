@@ -48,14 +48,6 @@ fn main() -> anyhow::Result<()> {
         packets: packet_rcv.clone(),
     };
 
-    println!("{}", cli.tui);
-
-    // Start the tui maybe (on the main thread)
-    if cli.tui {
-        println!("Startin tui!");
-        Tui::start()?;
-    }
-
     // Start the threads
     let process_thread = priority_thread_spawn!(
         "downsample",
@@ -65,6 +57,12 @@ fn main() -> anyhow::Result<()> {
     let dummy_thread = priority_thread_spawn!("dummy", dummy_consumer(&stokes_rcv));
     let decode_thread = priority_thread_spawn!("decode", decode_task(&packet_rcv, &payload_snd));
     let capture_thread = priority_thread_spawn!("capture", pcap_task(cap, &packet_snd, &stat_snd));
+
+    // Start the tui maybe (on the main thread)
+    if cli.tui {
+        println!("Startin tui!");
+        Tui::start()?;
+    }
 
     // Join the threads into the main task once they bail
     process_thread.join().unwrap();

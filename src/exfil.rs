@@ -6,8 +6,7 @@ pub fn dummy_consumer(receiver: &Receiver<Stokes>) {
     loop {
         // High speed, busy wait
         match receiver.try_recv() {
-            Ok(_) => (),
-            Err(_) => (),
+            Err(_) | Ok(_) => (),
         }
     }
 }

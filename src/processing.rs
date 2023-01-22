@@ -15,10 +15,7 @@ pub fn downsample_thread(
     let mut idx = 0usize;
     loop {
         // Busy wait on the next payload
-        let payload = match payload_recv.try_recv() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
+        let Ok(payload) = payload_recv.try_recv() else { continue };
         // Calculate stokes into the averaging buf
         avg_buf[idx] = payload.stokes_i();
         // If we're at the end, we're done
@@ -33,7 +30,7 @@ pub fn downsample_thread(
             avg.iter_mut()
                 .for_each(|v| *v /= f32::from(downsample_factor));
             // And send out
-            if let Ok(_) = stokes_send.try_send(avg) {
+            if stokes_send.try_send(avg).is_ok() {
                 // We don't care if this gets backed up, that's upstream's problem
             }
         }

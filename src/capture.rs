@@ -71,18 +71,15 @@ impl Capture {
     }
 
     fn next_payload(&mut self) -> Option<RawPacket> {
-        let pak = match self.0.next_packet() {
-            Ok(p) => p,
-            Err(_) => return None,
-        };
-        if pak.data.len() != (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
-            None
-        } else {
+        let Ok(p) = self.0.next_packet() else { return None };
+        if p.data.len() == (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
             Some(
-                pak.data[UDP_HEADER_SIZE..]
+                p.data[UDP_HEADER_SIZE..]
                     .try_into()
                     .expect("We've already checked the size"),
             )
+        } else {
+            None
         }
     }
 }
@@ -100,8 +97,9 @@ pub fn pcap_task(
     loop {
         if count == STAT_PACKET_INTERVAL {
             count = 0;
-            if let Ok(_) =
-                stat_sender.try_send(cap.0.stats().expect("Failed to get capture statistics"))
+            if stat_sender
+                .try_send(cap.0.stats().expect("Failed to get capture statistics"))
+                .is_ok()
             {
                 // We don't care about dropping stats, we *do* care about dropping packets
             }
@@ -116,11 +114,8 @@ pub fn pcap_task(
 
 pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sender<Payload>) -> ! {
     loop {
-        let raw_packet = match packet_receiver.try_recv() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        if let Ok(_) = payload_sender.try_send(Payload::from_bytes(&raw_packet)) {
+        let Ok(v) = packet_receiver.try_recv() else { continue };
+        if payload_sender.try_send(Payload::from_bytes(&v)).is_ok() {
             // If this channel backs up, we don't care, drop packets upstream
         }
     }

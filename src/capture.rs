@@ -59,7 +59,9 @@ impl Capture {
         let mut cap = pcap::Capture::from_device(device)
             .expect("Failed to create capture")
             .open()
-            .expect("Failed to open the capture");
+            .expect("Failed to open the capture")
+            .setnonblock()
+            .expect("Setting non-blocking mode failed");
         // Add the port filter
         cap.filter(&format!("dst port {port}"), true)
             .expect("Error creating port filter");
@@ -68,7 +70,10 @@ impl Capture {
     }
 
     fn next_payload(&mut self) -> Option<RawPacket> {
-        let pak = self.0.next_packet().ok()?;
+        let pak = match self.0.next_packet() {
+            Ok(p) => p,
+            Err(_) => return None,
+        };
         if pak.data.len() != (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
             return None;
         } else {

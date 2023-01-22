@@ -110,7 +110,10 @@ pub fn pcap_task(
 
 pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sender<Payload>) -> ! {
     loop {
-        let raw_packet = packet_receiver.recv().unwrap();
+        let raw_packet = match packet_receiver.try_recv() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
         if let Ok(_) = payload_sender.try_send(Payload::from_bytes(&raw_packet)) {
             // If this channel backs up, we don't care, drop packets upstream
         }

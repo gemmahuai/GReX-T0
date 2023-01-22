@@ -11,6 +11,7 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
     let mut last_rcv = 0;
     let mut last_drops = 0;
     loop {
+        // Blocking here is ok, these are infrequent events
         let stat = stat_receiver.recv().expect("Stat receive channel error");
         let since_last = last_state.elapsed();
         last_state = Instant::now();

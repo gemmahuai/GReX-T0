@@ -1,3 +1,5 @@
+//! Terminal interface to monitor the behavior of T0, WIP
+
 use crossterm::event::{self, Event, KeyCode};
 use std::io::stdout;
 use tui::{

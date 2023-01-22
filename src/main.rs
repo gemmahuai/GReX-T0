@@ -36,7 +36,9 @@ fn main() -> anyhow::Result<()> {
     if cli.tui {
         tui_logger::init_logger(LevelFilter::Trace).expect("Couldn't setup the tui logger");
     } else {
-        pretty_env_logger::init();
+        pretty_env_logger::formatted_builder()
+            .filter_level(LevelFilter::Info)
+            .init();
     }
 
     // Create the capture

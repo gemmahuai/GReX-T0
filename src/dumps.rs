@@ -30,12 +30,7 @@ impl DumpRing {
         // Tail points to the oldest data, which we will overwrite
         self.container[self.write_index] = payload;
         // Then move the tail back to point to the new "oldest"
-        let next_index = self.write_index + 1;
-        self.write_index = if next_index == self.container.len() {
-            0
-        } else {
-            next_index
-        }
+        self.write_index = (self.write_index + 1) & (self.container.len() - 1);
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]

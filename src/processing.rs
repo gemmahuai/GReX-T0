@@ -8,6 +8,7 @@ use log::info;
 pub fn downsample_thread(
     payload_recv: &Receiver<Payload>,
     stokes_send: &Sender<Stokes>,
+    dump_send: &Sender<Payload>,
     downsample_factor: u16,
 ) {
     info!("Starting downsample task");
@@ -40,5 +41,9 @@ pub fn downsample_thread(
         }
         // Increment the idx
         idx = (idx + 1) % downsample_factor as usize;
+        // And send the raw payload to the dumping ringbuffer
+        if dump_send.try_send(payload).is_ok() {
+            // We don't care if this gets backed up, that's upstream's problem
+        }
     }
 }

@@ -1,12 +1,11 @@
-//! Terminal interface to monitor the behavior of T0, WIP
+//! Terminal interface to monitor the behavior of T0, WIP (not working yet)
 
 use crossterm::event::{self, Event, KeyCode};
 use std::io::stdout;
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    text::Span,
+    style::{Color, Style},
     widgets::{Block, BorderType, Borders},
     Frame, Terminal,
 };

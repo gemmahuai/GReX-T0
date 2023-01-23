@@ -1,9 +1,10 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use grex_t0::{
     capture::PAYLOAD_SIZE,
     common::{Payload, CHANNELS},
+    dumps::DumpRing,
 };
 use rand::prelude::*;
 
@@ -73,5 +74,21 @@ fn downsample_stokes(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, decode, downsample_stokes);
+fn pack_ring(c: &mut Criterion) {
+    let mut group = c.benchmark_group("pack ring");
+    group
+        .sample_size(10)
+        .measurement_time(Duration::from_secs(30));
+    group.bench_function("pack ring", |b| {
+        b.iter_batched(
+            // I can't benchmark anymore on my home PC because I don't have enough RAM
+            || DumpRing::new(1_048_576),
+            |dr| black_box(dr.pack()),
+            BatchSize::PerIteration,
+        )
+    });
+    group.finish();
+}
+
+criterion_group!(benches, decode, pack_ring); //downsample_stokes
 criterion_main!(benches);

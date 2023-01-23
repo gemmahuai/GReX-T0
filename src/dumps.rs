@@ -77,6 +77,7 @@ pub fn trigger_task(signal_sender: &Sender<()>, socket: &UdpSocket) -> ! {
                     Ok(_) => signal_sender.send(()).unwrap(),
                     Err(e) => panic!("encountered IO error: {e}"),
                 }
+                poller.modify(socket, Event::readable(TRIG_EVENT)).unwrap();
             }
         }
     }

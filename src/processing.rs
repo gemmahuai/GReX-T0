@@ -35,15 +35,11 @@ pub fn downsample_thread(
             avg.iter_mut()
                 .for_each(|v| *v /= f32::from(downsample_factor));
             // And send out
-            if stokes_send.try_send(avg).is_ok() {
-                // We don't care if this gets backed up, that's upstream's problem
-            }
+            stokes_send.send(avg).unwrap();
         }
         // Increment the idx
         idx = (idx + 1) % downsample_factor as usize;
         // And send the raw payload to the dumping ringbuffer
-        if dump_send.try_send(payload).is_ok() {
-            // We don't care if this gets backed up, that's upstream's problem
-        }
+        dump_send.send(payload).unwrap();
     }
 }

@@ -2,7 +2,7 @@
 
 use crate::common::Payload;
 use crossbeam_channel::{Receiver, Sender};
-use log::{info, warn};
+use log::info;
 use num_complex::Complex;
 use pcap::Stat;
 
@@ -110,21 +110,19 @@ pub fn pcap_task(
             }
         }
         if let Some(payload) = cap.next_payload() {
-            if packet_sender.try_send(payload).is_ok() {
-                count += 1;
-            }
+            packet_sender.send(payload).unwrap();
+            count += 1;
         }
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sender<Payload>) -> ! {
     loop {
         let v = match packet_receiver.try_recv() {
             Ok(v) => v,
             Err(_) => continue,
         };
-        if payload_sender.try_send(Payload::from_bytes(&v)).is_ok() {
-            // If this channel backs up, we don't care, drop packets upstream
-        }
+        payload_sender.send(Payload::from_bytes(&v)).unwrap();
     }
 }

@@ -13,7 +13,7 @@ pub const TRIG_EVENT: usize = 42;
 
 pub struct DumpRing {
     container: Vec<Payload>,
-    tail: usize,
+    write_index: usize,
 }
 
 impl DumpRing {
@@ -21,16 +21,16 @@ impl DumpRing {
     pub fn new(size: usize) -> Self {
         Self {
             container: vec![Payload::default(); size],
-            tail: size - 1,
+            write_index: 0,
         }
     }
 
     #[allow(clippy::cast_possible_truncation)]
     pub fn push(&mut self, payload: Payload) {
         // Tail points to the oldest data, which we will overwrite
-        self.container[self.tail] = payload;
+        self.container[self.write_index] = payload;
         // Then move the tail back to point to the new "oldest"
-        self.tail = (self.tail as i64 - 1).rem_euclid(self.container.len() as i64) as usize;
+        self.write_index = (self.write_index + 1) % self.container.len();
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
@@ -43,7 +43,7 @@ impl DumpRing {
         buf.axis_iter_mut(Axis(0))
             .enumerate()
             .for_each(|(i, mut slice)| {
-                let pos = ((self.tail - i) as i64).rem_euclid(self.container.len() as i64) as usize;
+                let pos = (self.write_index + i) % self.container.len();
                 // Safety: pos is confined to 0 to len - 1 mathematically
                 let (a, b) = unsafe { self.container.get_unchecked(pos) }.packed_pols();
                 let a = ArrayView::from_shape((CHANNELS, 2), a).expect("Failed to make array view");

@@ -90,5 +90,15 @@ fn pack_ring(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, decode, pack_ring); //downsample_stokes
+pub fn push_ring(c: &mut Criterion) {
+    let mut dr = DumpRing::new(1_048_576);
+    let pl = Payload::default();
+    c.bench_function("push ring", |b| {
+        b.iter(|| {
+            dr.push(black_box(pl));
+        })
+    });
+}
+
+criterion_group!(benches, push_ring, downsample_stokes, pack_ring, decode);
 criterion_main!(benches);

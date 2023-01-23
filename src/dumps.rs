@@ -28,7 +28,10 @@ impl DumpRing {
     #[allow(clippy::cast_possible_truncation)]
     pub fn push(&mut self, payload: Payload) {
         // Tail points to the oldest data, which we will overwrite
-        self.container[self.write_index] = payload;
+        unsafe {
+            // Safety: Mod math means this index is always correct
+            *self.container.get_unchecked_mut(self.write_index) = payload;
+        }
         // Then move the tail back to point to the new "oldest"
         self.write_index = (self.write_index + 1) % self.container.len();
     }

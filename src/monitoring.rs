@@ -12,7 +12,7 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
     let mut last_rcv = 0;
     let mut last_drops = 0;
     println!(
-        "{0: <8} | {1: <8} | {2: <8} | {3: <8} | {4: <8} | {5: <8}",
+        "{0: <10} | {1: <10} | {2: <10} | {3: <10} | {4: <10} | {5: <10}",
         "PPS", "DPS", "Packets", "Payload", "Stokes", "Dumps"
     );
     loop {
@@ -25,7 +25,7 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
         last_rcv = stat.received;
         last_drops = stat.dropped;
         println!(
-            "{0: <8} | {1: <8} | {2: <8} | {3: <8} | {4: <8} | {5: <8}",
+            "{0: <10} | {1: <10} | {2: <10} | {3: <10} | {4: <10} | {5: <10}",
             pps,
             dps,
             all_chans.packets.len(),

@@ -56,10 +56,10 @@ fn main() -> anyhow::Result<()> {
 
     // Create the collection of channels that we can monitor
     let all_chans = AllChans {
-        payload: payload_rcv.clone(),
-        stat: stat_rcv.clone(),
-        stokes: stokes_rcv.clone(),
         packets: packet_rcv.clone(),
+        payload: payload_rcv.clone(),
+        stokes: stokes_rcv.clone(),
+        dump: dump_rcv.clone(),
     };
 
     // Create the ring buffer to store voltage dumps

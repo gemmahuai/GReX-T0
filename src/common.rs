@@ -23,8 +23,8 @@ pub struct Payload {
 pub struct AllChans {
     pub packets: Receiver<RawPacket>,
     pub payload: Receiver<Payload>,
-    pub stat: Receiver<Stat>,
     pub stokes: Receiver<Stokes>,
+    pub dump: Receiver<Payload>,
 }
 
 impl Default for Payload {

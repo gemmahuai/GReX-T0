@@ -3,6 +3,7 @@
 use crate::common::{Payload, CHANNELS};
 use crossbeam_channel::{Receiver, Sender};
 use hdf5::File;
+use log::info;
 use ndarray::{s, Array4, ArrayView, Axis};
 use polling::{Event, Poller};
 use std::net::UdpSocket;
@@ -58,6 +59,7 @@ impl DumpRing {
 
 #[allow(clippy::missing_panics_doc)]
 pub fn trigger_task(signal_sender: &Sender<()>, socket: &UdpSocket) -> ! {
+    info!("Starting voltage ringbuffer trigger task!");
     // Maybe even 0 would work, we don't expect data
     let mut buf = [0; 10];
     // Create a poller and register interest in readability on the socket.
@@ -85,9 +87,11 @@ pub fn dump_task(
     payload_reciever: &Receiver<Payload>,
     signal_reciever: &Receiver<()>,
 ) -> ! {
+    info!("Starting voltage ringbuffer fill task!");
     loop {
         // First check if we need to dump, as that takes priority
         if signal_reciever.try_recv().is_ok() {
+            info!("Dumping ringbuffer");
             // Dump
             let file = File::create("voltages.h5").expect("Bad filename");
             let group = file.create_group("dir").expect("Bad directory");

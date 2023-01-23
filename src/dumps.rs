@@ -28,12 +28,14 @@ impl DumpRing {
     #[allow(clippy::cast_possible_truncation)]
     pub fn push(&mut self, payload: Payload) {
         // Tail points to the oldest data, which we will overwrite
-        unsafe {
-            // Safety: Mod math means this index is always correct
-            *self.container.get_unchecked_mut(self.write_index) = payload;
-        }
+        self.container[self.write_index] = payload;
         // Then move the tail back to point to the new "oldest"
-        self.write_index = (self.write_index + 1) % self.container.len();
+        let next_index = self.write_index + 1;
+        self.write_index = if next_index == self.container.len() {
+            0
+        } else {
+            next_index
+        }
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
@@ -86,45 +88,32 @@ pub fn trigger_task(signal_sender: &Sender<()>, socket: &UdpSocket) -> ! {
     }
 }
 
-// pub fn dump_task(
-//     mut ring: DumpRing,
-//     payload_reciever: &Receiver<Payload>,
-//     signal_reciever: &Receiver<()>,
-// ) -> ! {
-//     info!("Starting voltage ringbuffer fill task!");
-//     loop {
-//         // First check if we need to dump, as that takes priority
-//         if signal_reciever.try_recv().is_ok() {
-//             info!("Dumping ringbuffer");
-//             // Dump
-//             let file = File::create("voltages.h5").expect("Bad filename");
-//             let group = file.create_group("dir").expect("Bad directory");
-//             let builder = group.new_dataset_builder();
-//             // Build the data to serialize
-//             let packed = ring.pack();
-//             // Finalize and write
-//             builder
-//                 .with_data(&packed)
-//                 .create("voltages")
-//                 .expect("Failed to build dataset");
-//         } else {
-//             // If we're not dumping, we're pushing data into the ringbuffer
-//             if let Ok(v) = payload_reciever.try_recv() {
-//                 ring.push(v);
-//             }
-//         }
-
-//     }
-// }
-
 pub fn dump_task(
     mut ring: DumpRing,
     payload_reciever: &Receiver<Payload>,
     signal_reciever: &Receiver<()>,
 ) -> ! {
+    info!("Starting voltage ringbuffer fill task!");
     loop {
-        if payload_reciever.try_recv().is_ok() {
-            // do nothing
+        // First check if we need to dump, as that takes priority
+        if signal_reciever.try_recv().is_ok() {
+            info!("Dumping ringbuffer");
+            // Dump
+            let file = File::create("voltages.h5").expect("Bad filename");
+            let group = file.create_group("dir").expect("Bad directory");
+            let builder = group.new_dataset_builder();
+            // Build the data to serialize
+            let packed = ring.pack();
+            // Finalize and write
+            builder
+                .with_data(&packed)
+                .create("voltages")
+                .expect("Failed to build dataset");
+        } else {
+            // If we're not dumping, we're pushing data into the ringbuffer
+            if let Ok(v) = payload_reciever.try_recv() {
+                ring.push(v);
+            }
         }
     }
 }

@@ -47,9 +47,9 @@ fn main() -> anyhow::Result<()> {
     let cap = Capture::new(&cli.cap_interface, cli.cap_port);
 
     // Create all the channels
-    let (packet_snd, packet_rcv) = bounded(10_000);
-    let (payload_snd, payload_rcv) = bounded(10_000);
-    let (dump_snd, dump_rcv) = bounded(10_000);
+    let (packet_snd, packet_rcv) = bounded(100_000);
+    let (payload_snd, payload_rcv) = bounded(100_000);
+    let (dump_snd, dump_rcv) = bounded(100_000);
     let (stat_snd, stat_rcv) = bounded(100);
     let (stokes_snd, stokes_rcv) = bounded(100);
     let (signal_snd, signal_rcv) = bounded(100);

@@ -110,8 +110,9 @@ pub fn pcap_task(
             }
         }
         if let Some(payload) = cap.next_payload() {
-            packet_sender.send(payload).unwrap();
-            count += 1;
+            if packet_sender.send(payload).is_ok() {
+                count += 1;
+            }
         }
     }
 }
@@ -123,6 +124,8 @@ pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sende
             Ok(v) => v,
             Err(_) => continue,
         };
-        payload_sender.send(Payload::from_bytes(&v)).unwrap();
+        if payload_sender.try_send(Payload::from_bytes(&v)).is_ok() {
+            // Just spin until we can
+        }
     }
 }

@@ -15,15 +15,23 @@ use grex_t0::{
 };
 use log::LevelFilter;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
-pub use thread_priority::{ThreadBuilder, ThreadPriority};
+use thread_priority::{
+    set_thread_priority_and_policy, thread_native_id, RealtimeThreadSchedulePolicy, ThreadBuilder,
+    ThreadPriority, ThreadSchedulePolicy,
+};
 
 macro_rules! priority_thread_spawn {
     ($thread_name:literal, $fcall:expr) => {
         ThreadBuilder::default()
             .name($thread_name)
-            .priority(ThreadPriority::Crossplatform(95.try_into().unwrap()))
-            .spawn(move |result| {
-                assert!(result.is_ok());
+            .spawn(move |_| {
+                let thread_id = thread_native_id();
+                assert!(set_thread_priority_and_policy(
+                    thread_id,
+                    ThreadPriority::Max,
+                    ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::RoundRobin)
+                )
+                .is_ok());
                 $fcall;
             })
             .unwrap()

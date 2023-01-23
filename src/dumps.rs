@@ -86,32 +86,45 @@ pub fn trigger_task(signal_sender: &Sender<()>, socket: &UdpSocket) -> ! {
     }
 }
 
+// pub fn dump_task(
+//     mut ring: DumpRing,
+//     payload_reciever: &Receiver<Payload>,
+//     signal_reciever: &Receiver<()>,
+// ) -> ! {
+//     info!("Starting voltage ringbuffer fill task!");
+//     loop {
+//         // First check if we need to dump, as that takes priority
+//         if signal_reciever.try_recv().is_ok() {
+//             info!("Dumping ringbuffer");
+//             // Dump
+//             let file = File::create("voltages.h5").expect("Bad filename");
+//             let group = file.create_group("dir").expect("Bad directory");
+//             let builder = group.new_dataset_builder();
+//             // Build the data to serialize
+//             let packed = ring.pack();
+//             // Finalize and write
+//             builder
+//                 .with_data(&packed)
+//                 .create("voltages")
+//                 .expect("Failed to build dataset");
+//         } else {
+//             // If we're not dumping, we're pushing data into the ringbuffer
+//             if let Ok(v) = payload_reciever.try_recv() {
+//                 ring.push(v);
+//             }
+//         }
+
+//     }
+// }
+
 pub fn dump_task(
     mut ring: DumpRing,
     payload_reciever: &Receiver<Payload>,
     signal_reciever: &Receiver<()>,
 ) -> ! {
-    info!("Starting voltage ringbuffer fill task!");
     loop {
-        // First check if we need to dump, as that takes priority
-        if signal_reciever.try_recv().is_ok() {
-            info!("Dumping ringbuffer");
-            // Dump
-            let file = File::create("voltages.h5").expect("Bad filename");
-            let group = file.create_group("dir").expect("Bad directory");
-            let builder = group.new_dataset_builder();
-            // Build the data to serialize
-            let packed = ring.pack();
-            // Finalize and write
-            builder
-                .with_data(&packed)
-                .create("voltages")
-                .expect("Failed to build dataset");
-        } else {
-            // If we're not dumping, we're pushing data into the ringbuffer
-            if let Ok(v) = payload_reciever.try_recv() {
-                ring.push(v);
-            }
+        if payload_reciever.try_recv().is_ok() {
+            // do nothing
         }
     }
 }

@@ -60,7 +60,7 @@ impl Capture {
         // Create the "capture"
         let mut cap = pcap::Capture::from_device(device)
             .expect("Failed to create capture")
-            .buffer_size(16_777_216) // Up to 10ms
+            .buffer_size(33_554_432) // Up to 20ms
             .open()
             .expect("Failed to open the capture")
             .setnonblock()

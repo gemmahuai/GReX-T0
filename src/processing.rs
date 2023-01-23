@@ -40,8 +40,6 @@ pub fn downsample_thread(
         // Increment the idx
         idx = (idx + 1) % downsample_factor as usize;
         // And send the raw payload to the dumping ringbuffer
-        if dump_send.try_send(payload).is_ok() {
-            //spin
-        }
+        dump_send.send(payload).unwrap();
     }
 }

@@ -120,12 +120,7 @@ pub fn pcap_task(
 #[allow(clippy::missing_panics_doc)]
 pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sender<Payload>) -> ! {
     loop {
-        let v = match packet_receiver.try_recv() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        if payload_sender.try_send(Payload::from_bytes(&v)).is_ok() {
-            // Just spin until we can
-        }
+        let v = packet_receiver.recv().unwrap();
+        payload_sender.send(Payload::from_bytes(&v)).unwrap();
     }
 }

@@ -1,6 +1,7 @@
 //! Inter-thread processing (downsampling, voltage ring buffer, etc)
 
 use crate::common::{Payload, Stokes, CHANNELS};
+use crabgrind as cg;
 use crossbeam::channel::{Receiver, Sender};
 use log::info;
 
@@ -39,6 +40,8 @@ pub fn downsample_task(
     let mut avg = [0f32; CHANNELS];
     let mut idx = 0usize;
     loop {
+        cg::callgrind::stop_instrumentation();
+        cg::callgrind::start_instrumentation();
         // Busy wait on the next payload
         let payload = loop {
             match payload_recv.try_recv() {

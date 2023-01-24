@@ -45,23 +45,21 @@ fn downsample_stokes(c: &mut Criterion) {
                     }
 
                     // Setup state
-                    let mut avg_buf = vec![[0u16; CHANNELS]; downsample_factor];
+                    let mut avg = [0f32; CHANNELS];
                     let mut idx = 0usize;
 
                     let start = Instant::now();
                     for i in 0..iters {
-                        avg_buf[idx] = payloads[i as usize].stokes_i();
+                        avg.iter_mut()
+                            .zip(payloads[i as usize].stokes_i())
+                            .for_each(|(x, y)| *x += f32::from(y));
                         // If we're at the end, calculate the average
                         if idx == downsample_factor - 1 {
                             // Find the average into an f32 (which is lossless)
-                            let mut avg = [0f32; CHANNELS];
-                            for chan in 0..CHANNELS {
-                                for avg_row in avg_buf.iter().take(downsample_factor) {
-                                    avg[chan] += f32::from(avg_row[chan]);
-                                }
-                            }
                             avg.iter_mut()
                                 .for_each(|v| *v /= f32::from(downsample_factor as u16));
+                            // And zero the state
+                            avg = [0f32; CHANNELS];
                         }
                         // Increment the idx
                         idx = (idx + 1) % downsample_factor;

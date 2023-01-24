@@ -4,13 +4,36 @@ use crate::common::{Payload, Stokes, CHANNELS};
 use crossbeam_channel::{Receiver, Sender};
 use log::info;
 
+pub fn dummy_downsample(
+    payload_recv: &Receiver<Payload>,
+    _: &Sender<Stokes>,
+    dump_send: &Sender<Payload>,
+    _: u16,
+) -> ! {
+    loop {
+        // Busy wait on the next payload
+        let payload = loop {
+            match payload_recv.try_recv() {
+                Ok(v) => break v,
+                Err(_) => continue,
+            };
+        };
+        // And send the raw payload to the dumping ringbuffer
+        loop {
+            if dump_send.try_send(payload).is_ok() {
+                break;
+            }
+        }
+    }
+}
+
 #[allow(clippy::missing_panics_doc)]
 pub fn downsample_thread(
     payload_recv: &Receiver<Payload>,
     stokes_send: &Sender<Stokes>,
     dump_send: &Sender<Payload>,
     downsample_factor: u16,
-) {
+) -> ! {
     info!("Starting downsample task");
     // Preallocate averaging vector
     let mut avg_buf = vec![[0u16; CHANNELS]; downsample_factor as usize];

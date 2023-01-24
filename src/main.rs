@@ -10,7 +10,7 @@ use grex_t0::{
     dumps::{dump_task, trigger_task, DumpRing},
     exfil::dummy_consumer,
     monitoring::monitor_task,
-    processing::downsample_thread,
+    processing::{downsample_thread, dummy_downsample},
     tui::Tui,
 };
 use log::LevelFilter;
@@ -72,7 +72,7 @@ fn main() -> anyhow::Result<()> {
     // Start the threads
     let process_thread = priority_thread_spawn!(
         "downsample",
-        downsample_thread(&payload_rcv, &stokes_snd, &dump_snd, cli.downsample)
+        dummy_downsample(&payload_rcv, &stokes_snd, &dump_snd, cli.downsample)
     );
     let monitor_thread = priority_thread_spawn!("monitor", monitor_task(&stat_rcv, &all_chans));
     let dummy_thread = priority_thread_spawn!("dummy", dummy_consumer(&stokes_rcv));

@@ -79,13 +79,13 @@ fn main() -> anyhow::Result<()> {
 
     // Start the threads
     thread_spawn! {
-        8  : "monitor"    : monitor_task(&stat_rcv, &all_chans),
-        9  : "dummy_exfil": dummy_consumer(&stokes_rcv),
-        10 : "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
-        11 : "split"      : split_task(&payload_rcv, &downsamp_snd, &dump_snd),
-        12 : "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv),
-        13 : "dump_trig"  : trigger_task(&signal_snd, &socket),
-        14 : "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
+        0  : "monitor"    : monitor_task(&stat_rcv, &all_chans),
+        1  : "dummy_exfil": dummy_consumer(&stokes_rcv),
+        2 : "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
+        3 : "split"      : split_task(&payload_rcv, &downsamp_snd, &dump_snd),
+        4 : "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv),
+        5 : "dump_trig"  : trigger_task(&signal_snd, &socket),
+        6 : "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
     }
 
     // Start the tui maybe (on the main thread)

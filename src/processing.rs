@@ -28,7 +28,7 @@ pub fn dummy_downsample(
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn downsample_thread(
+pub fn downsample_task(
     payload_recv: &Receiver<Payload>,
     stokes_send: &Sender<Stokes>,
     dump_send: &Sender<Payload>,

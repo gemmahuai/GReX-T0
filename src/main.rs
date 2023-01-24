@@ -10,7 +10,7 @@ use grex_t0::{
     dumps::{dump_task, trigger_task, DumpRing},
     exfil::dummy_consumer,
     monitoring::monitor_task,
-    processing::{downsample_task, dummy_downsample},
+    processing::downsample_task,
     tui::Tui,
 };
 use log::LevelFilter;

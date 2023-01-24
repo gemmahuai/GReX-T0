@@ -4,6 +4,7 @@ use crate::common::{Payload, Stokes, CHANNELS};
 use crossbeam_channel::{Receiver, Sender};
 use log::info;
 
+/// Fake middleman function to test throughput
 #[allow(clippy::missing_panics_doc)]
 pub fn dummy_downsample(
     payload_recv: &Receiver<Payload>,

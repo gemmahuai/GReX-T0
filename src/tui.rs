@@ -59,6 +59,7 @@ fn ui<B: Backend>(f: &mut Frame<B>) {
 pub struct Tui {}
 
 impl Tui {
+    #[allow(clippy::missing_errors_doc)]
     pub fn start() -> anyhow::Result<()> {
         // Configure Crossterm backend for tui
         let stdout = stdout();
@@ -69,7 +70,7 @@ impl Tui {
         terminal.hide_cursor()?;
 
         // create app and run it
-        let res = run_app(&mut terminal);
+        let _res = run_app(&mut terminal);
 
         // Restore the terminal and close application
         terminal.clear()?;

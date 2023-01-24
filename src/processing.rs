@@ -13,17 +13,9 @@ pub fn dummy_downsample(
     _: u16,
 ) -> ! {
     loop {
-        // Busy wait on the next payload
-        let payload = loop {
-            match payload_recv.try_recv() {
-                Ok(v) => break v,
-                Err(_) => continue,
-            };
-        };
-        // And send the raw payload to the dumping ringbuffer
-        while dump_send.is_full() {}
+        let payload = payload_recv.recv().unwrap();
         // We ensured we have space in the previous loop
-        dump_send.try_send(payload).unwrap();
+        dump_send.send(payload).unwrap();
     }
 }
 
@@ -39,17 +31,10 @@ pub fn downsample_task(
     let mut avg = [0f32; CHANNELS];
     let mut idx = 0usize;
     loop {
-        // Busy wait on the next payload
-        let payload = loop {
-            match payload_recv.try_recv() {
-                Ok(v) => break v,
-                Err(_) => continue,
-            };
-        };
+        let payload = payload_recv.recv().unwrap();
         // The immediately send it to the ringbuffer
-        while dump_send.is_full() {}
         // This will panic on real errors, which we want
-        dump_send.try_send(payload).unwrap();
+        dump_send.send(payload).unwrap();
         // Calculate stokes into the averaging buf
         avg.iter_mut()
             .zip(payload.stokes_i())
@@ -59,9 +44,7 @@ pub fn downsample_task(
             // Find the average into an f32 (which is lossless)
             avg.iter_mut()
                 .for_each(|v| *v /= f32::from(downsample_factor));
-            // And busy wait send out
-            while stokes_send.is_full() {}
-            stokes_send.try_send(avg).unwrap();
+            stokes_send.send(avg).unwrap();
             // And zero the averaging buf
             avg = [0f32; CHANNELS];
         }

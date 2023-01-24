@@ -62,9 +62,9 @@ impl Capture {
             .expect("Failed to create capture")
             .buffer_size(33_554_432) // Up to 20ms
             .open()
-            .expect("Failed to open the capture")
-            .setnonblock()
-            .expect("Setting non-blocking mode failed");
+            .expect("Failed to open the capture");
+        //.setnonblock()
+        //.expect("Setting non-blocking mode failed");
         // Add the port filter
         cap.filter(&format!("dst port {port}"), true)
             .expect("Error creating port filter");
@@ -73,10 +73,7 @@ impl Capture {
     }
 
     fn next_payload(&mut self) -> Option<RawPacket> {
-        let p = match self.0.next_packet() {
-            Ok(v) => v,
-            Err(_) => return None,
-        };
+        let p = self.0.next_packet().unwrap();
         if p.data.len() == (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
             Some(
                 p.data[UDP_HEADER_SIZE..]
@@ -110,8 +107,7 @@ pub fn pcap_task(
             }
         }
         if let Some(payload) = cap.next_payload() {
-            while packet_sender.is_full() {}
-            packet_sender.try_send(payload).unwrap();
+            packet_sender.send(payload).unwrap();
             count += 1;
         }
     }
@@ -120,13 +116,7 @@ pub fn pcap_task(
 #[allow(clippy::missing_panics_doc)]
 pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sender<Payload>) -> ! {
     loop {
-        let v = loop {
-            match packet_receiver.try_recv() {
-                Ok(v) => break v,
-                Err(_) => continue,
-            }
-        };
-        while payload_sender.is_full() {}
-        payload_sender.try_send(Payload::from_bytes(&v)).unwrap();
+        let v = packet_receiver.recv().unwrap();
+        payload_sender.send(Payload::from_bytes(&v)).unwrap();
     }
 }

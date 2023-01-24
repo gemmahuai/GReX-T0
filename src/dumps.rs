@@ -77,6 +77,7 @@ pub fn trigger_task(signal_sender: &Sender<()>, socket: &UdpSocket) -> ! {
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub fn dump_task(
     mut ring: DumpRing,
     payload_reciever: &Receiver<Payload>,
@@ -100,9 +101,8 @@ pub fn dump_task(
                 .expect("Failed to build dataset");
         } else {
             // If we're not dumping, we're pushing data into the ringbuffer
-            if let Ok(v) = payload_reciever.try_recv() {
-                ring.push(v);
-            }
+            let payload = payload_reciever.recv().unwrap();
+            ring.push(payload);
         }
     }
 }

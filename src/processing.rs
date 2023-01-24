@@ -17,9 +17,11 @@ pub fn downsample_thread(
     let mut idx = 0usize;
     loop {
         // Busy wait on the next payload
-        let payload = match payload_recv.try_recv() {
-            Ok(v) => v,
-            Err(_) => continue,
+        let payload = loop {
+            match payload_recv.try_recv() {
+                Ok(v) => break v,
+                Err(_) => continue,
+            };
         };
         // Calculate stokes into the averaging buf
         avg_buf[idx] = payload.stokes_i();
@@ -34,12 +36,20 @@ pub fn downsample_thread(
             }
             avg.iter_mut()
                 .for_each(|v| *v /= f32::from(downsample_factor));
-            // And send out
-            stokes_send.send(avg).unwrap();
+            // And busy wait send out
+            loop {
+                if stokes_send.try_send(avg).is_ok() {
+                    break;
+                }
+            }
         }
         // Increment the idx
         idx = (idx + 1) % downsample_factor as usize;
         // And send the raw payload to the dumping ringbuffer
-        dump_send.send(payload).unwrap();
+        loop {
+            if dump_send.try_send(payload).is_ok() {
+                break;
+            }
+        }
     }
 }

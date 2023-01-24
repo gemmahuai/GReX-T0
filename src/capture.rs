@@ -110,8 +110,14 @@ pub fn pcap_task(
             }
         }
         if let Some(payload) = cap.next_payload() {
-            if packet_sender.send(payload).is_ok() {
-                count += 1;
+            loop {
+                match packet_sender.try_send(payload) {
+                    Ok(_) => {
+                        count += 1;
+                        break;
+                    }
+                    Err(_) => continue,
+                }
             }
         }
     }
@@ -120,7 +126,17 @@ pub fn pcap_task(
 #[allow(clippy::missing_panics_doc)]
 pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sender<Payload>) -> ! {
     loop {
-        let v = packet_receiver.recv().unwrap();
-        payload_sender.send(Payload::from_bytes(&v)).unwrap();
+        let v = loop {
+            match packet_receiver.try_recv() {
+                Ok(v) => break v,
+                Err(_) => continue,
+            }
+        };
+        loop {
+            match payload_sender.try_send(Payload::from_bytes(&v)) {
+                Ok(_) => break,
+                Err(_) => continue,
+            }
+        }
     }
 }

@@ -13,13 +13,6 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
     let mut last_drops = 0;
     let mut header = false;
     loop {
-        if !header {
-            println!(
-                "{0: <10} | {1: <10} | {2: <10} | {3: <10} | {4: <10} | {5: <10}",
-                "PPS", "DPS", "->Split", "->Downsamp", "->Ring", "->Stokes"
-            );
-            header = true;
-        }
         // Blocking here is ok, these are infrequent events
         let stat = stat_receiver.recv().expect("Stat receive channel error");
         let since_last = last_state.elapsed();
@@ -28,6 +21,13 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
         let dps = (stat.dropped - last_drops) as f32 / since_last.as_secs_f32();
         last_rcv = stat.received;
         last_drops = stat.dropped;
+        if !header {
+            println!(
+                "{0: <10} | {1: <10} | {2: <10} | {3: <10} | {4: <10} | {5: <10}",
+                "PPS", "DPS", "->Split", "->Downsamp", "->Ring", "->Stokes"
+            );
+            header = true;
+        }
         println!(
             "{0: <10} | {1: <10} | {2: <10} | {3: <10} | {4: <10} | {5: <10}",
             pps,

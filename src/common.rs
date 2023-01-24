@@ -1,7 +1,6 @@
 //! Common types shared between tasks
 
-use crate::capture::RawPacket;
-use crossbeam::channel::Receiver;
+use crossbeam::channel::{Receiver, Sender};
 use num_complex::Complex;
 
 /// Number of frequency channels (set by gateware)
@@ -9,8 +8,7 @@ pub const CHANNELS: usize = 2048;
 
 pub type Stokes = [f32; CHANNELS];
 
-#[derive(Debug)]
-#[repr(C)]
+#[derive(Debug, Clone)]
 pub struct Payload {
     /// Number of packets since the first packet
     pub count: u64,
@@ -20,10 +18,10 @@ pub struct Payload {
 
 #[derive(Debug)]
 pub struct AllChans {
-    pub packets: Receiver<RawPacket>,
-    pub payload: Receiver<Payload>,
+    pub cap_payload: Receiver<Payload>,
+    pub payload_to_downsample: Receiver<Payload>,
+    pub payload_to_ring: Receiver<Payload>,
     pub stokes: Receiver<Stokes>,
-    pub dump: Receiver<Payload>,
 }
 
 impl Default for Payload {
@@ -72,5 +70,18 @@ impl Payload {
             )
         };
         (bytes_a, bytes_b)
+    }
+}
+
+// Splits a channel with a clone
+#[allow(clippy::missing_panics_doc)]
+pub fn split_task<T>(rcv: &Receiver<T>, s1: &Sender<T>, s2: &Sender<T>)
+where
+    T: Clone,
+{
+    loop {
+        let x = rcv.recv().unwrap();
+        s1.send(x.clone()).unwrap();
+        s2.send(x).unwrap();
     }
 }

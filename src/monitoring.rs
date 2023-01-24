@@ -11,11 +11,15 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
     let mut last_state = Instant::now();
     let mut last_rcv = 0;
     let mut last_drops = 0;
-    println!(
-        "{0: <10} | {1: <10} | {2: <10} | {3: <10} | {4: <10} | {5: <10}",
-        "PPS", "DPS", "Packets", "Payload", "Stokes", "Dumps"
-    );
+    let mut header = false;
     loop {
+        if !header {
+            println!(
+                "{0: <10} | {1: <10} | {2: <10} | {3: <10} | {4: <10} | {5: <10}",
+                "PPS", "DPS", "->Split", "->Downsamp", "->Ring", "->Stokes"
+            );
+            header = true;
+        }
         // Blocking here is ok, these are infrequent events
         let stat = stat_receiver.recv().expect("Stat receive channel error");
         let since_last = last_state.elapsed();
@@ -28,10 +32,10 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
             "{0: <10} | {1: <10} | {2: <10} | {3: <10} | {4: <10} | {5: <10}",
             pps,
             dps,
-            all_chans.packets.len(),
-            all_chans.payload.len(),
+            all_chans.cap_payload.len(),
+            all_chans.payload_to_downsample.len(),
+            all_chans.payload_to_ring.len(),
             all_chans.stokes.len(),
-            all_chans.dump.len(),
         );
     }
 }

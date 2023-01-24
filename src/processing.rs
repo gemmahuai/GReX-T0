@@ -4,26 +4,10 @@ use crate::common::{Payload, Stokes, CHANNELS};
 use crossbeam::channel::{Receiver, Sender};
 use log::info;
 
-/// Fake middleman function to test throughput
-#[allow(clippy::missing_panics_doc)]
-pub fn dummy_downsample(
-    payload_recv: &Receiver<Payload>,
-    _: &Sender<Stokes>,
-    dump_send: &Sender<Payload>,
-    _: u16,
-) -> ! {
-    loop {
-        let payload = payload_recv.recv().unwrap();
-        // We ensured we have space in the previous loop
-        dump_send.send(payload).unwrap();
-    }
-}
-
 #[allow(clippy::missing_panics_doc)]
 pub fn downsample_task(
     payload_recv: &Receiver<Payload>,
     stokes_send: &Sender<Stokes>,
-    dump_send: &Sender<Payload>,
     downsample_factor: u16,
 ) -> ! {
     info!("Starting downsample task");
@@ -47,7 +31,5 @@ pub fn downsample_task(
         }
         // Increment the idx
         idx = (idx + 1) % downsample_factor as usize;
-        // This will panic on real errors, which we want
-        dump_send.send(payload).unwrap();
     }
 }

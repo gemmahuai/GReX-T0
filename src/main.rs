@@ -6,8 +6,8 @@ pub use crossbeam::channel::bounded;
 use crossbeam::thread;
 use grex_t0::{
     args,
-    capture::{decode_task, pcap_task, Capture},
-    common::AllChans,
+    capture::{pcap_task, Capture},
+    common::{split_task, AllChans},
     dumps::{dump_task, trigger_task, DumpRing},
     exfil::dummy_consumer,
     monitoring::monitor_task,
@@ -41,20 +41,24 @@ fn main() -> anyhow::Result<()> {
     // Create the capture
     let cap = Capture::new(&cli.cap_interface, cli.cap_port);
 
-    // Create all the channels
-    let (packet_snd, packet_rcv) = bounded(10_000);
+    // Payloads from capture to split
     let (payload_snd, payload_rcv) = bounded(10_000);
+    // Payloads from split to dump ring and downsample
+    let (downsamp_snd, downsamp_rcv) = bounded(10_000);
     let (dump_snd, dump_rcv) = bounded(10_000);
+    // Stats
     let (stat_snd, stat_rcv) = bounded(100);
+    // Stokes out from downsample
     let (stokes_snd, stokes_rcv) = bounded(100);
+    // Triggers for dumping ring
     let (signal_snd, signal_rcv) = bounded(100);
 
     // Create the collection of channels that we can monitor
     let all_chans = AllChans {
-        packets: packet_rcv.clone(),
-        payload: payload_rcv.clone(),
         stokes: stokes_rcv.clone(),
-        dump: dump_rcv.clone(),
+        payload_to_downsample: downsamp_rcv.clone(),
+        payload_to_ring: dump_rcv.clone(),
+        cap_payload: payload_rcv.clone(),
     };
 
     // Create the ring buffer to store voltage dumps
@@ -68,11 +72,11 @@ fn main() -> anyhow::Result<()> {
     thread_spawn! {
         "monitor": monitor_task(&stat_rcv, &all_chans),
         "dummy_exfil": dummy_consumer(&stokes_rcv),
-        "downsample": downsample_task(&payload_rcv, &stokes_snd, &dump_snd, cli.downsample),
-        "decode": decode_task(&packet_rcv, &payload_snd),
+        "downsample": downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
+        "split": split_task(&payload_rcv, &downsamp_snd, &dump_snd),
         "dump_fill": dump_task(dr, &dump_rcv, &signal_rcv),
         "dump_trig": trigger_task(&signal_snd, &socket),
-        "capture": pcap_task(cap, &packet_snd, &stat_snd)
+        "capture": pcap_task(cap, &payload_snd, &stat_snd)
     }
 
     // Start the tui maybe (on the main thread)

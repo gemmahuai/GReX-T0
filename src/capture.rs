@@ -1,7 +1,7 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
 use crate::common::Payload;
-use crossbeam::channel::{Receiver, Sender};
+use crossbeam::channel::Sender;
 use log::info;
 use num_complex::Complex;
 use pcap::Stat;
@@ -91,7 +91,7 @@ pub type RawPacket = [u8; PAYLOAD_SIZE];
 #[allow(clippy::missing_panics_doc)]
 pub fn pcap_task(
     mut cap: Capture,
-    packet_sender: &Sender<RawPacket>,
+    payload_sender: &Sender<Payload>,
     stat_sender: &Sender<Stat>,
 ) -> ! {
     info!("Starting capture task!");
@@ -106,17 +106,9 @@ pub fn pcap_task(
                 // We don't care about dropping stats, we *do* care about dropping packets
             }
         }
-        if let Some(payload) = cap.next_payload() {
-            packet_sender.send(payload).unwrap();
+        if let Some(bytes) = cap.next_payload() {
+            payload_sender.send(Payload::from_bytes(&bytes)).unwrap();
             count += 1;
         }
-    }
-}
-
-#[allow(clippy::missing_panics_doc)]
-pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sender<Payload>) -> ! {
-    loop {
-        let v = packet_receiver.recv().unwrap();
-        payload_sender.send(Payload::from_bytes(&v)).unwrap();
     }
 }

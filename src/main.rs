@@ -2,7 +2,8 @@
 #![warn(clippy::pedantic)]
 
 pub use clap::Parser;
-pub use crossbeam_channel::bounded;
+pub use crossbeam::channel::bounded;
+use crossbeam::thread;
 use grex_t0::{
     args,
     capture::{decode_task, pcap_task, Capture},
@@ -15,18 +16,12 @@ use grex_t0::{
 };
 use log::LevelFilter;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
-use thread_priority::{ThreadBuilder, ThreadPriority};
 
-macro_rules! priority_thread_spawn {
-    ($thread_name:literal, $fcall:expr) => {
-        ThreadBuilder::default()
-            .name($thread_name)
-            .priority(ThreadPriority::Crossplatform(95.try_into().unwrap()))
-            .spawn(move |result| {
-                assert!(result.is_ok());
-                $fcall;
-            })
-            .unwrap()
+macro_rules! thread_spawn {
+    {$($thread_name:literal: $fcall:expr), +} => {
+        thread::scope(|s| {
+            $(s.builder().name($thread_name.to_string()).spawn(|_| $fcall).unwrap();)+
+        }).unwrap();
     };
 }
 
@@ -70,30 +65,20 @@ fn main() -> anyhow::Result<()> {
     socket.set_nonblocking(true)?;
 
     // Start the threads
-    let process_thread = priority_thread_spawn!(
-        "downsample",
-        downsample_task(&payload_rcv, &stokes_snd, &dump_snd, cli.downsample)
-    );
-    let monitor_thread = priority_thread_spawn!("monitor", monitor_task(&stat_rcv, &all_chans));
-    let dummy_thread = priority_thread_spawn!("dummy", dummy_consumer(&stokes_rcv));
-    let decode_thread = priority_thread_spawn!("decode", decode_task(&packet_rcv, &payload_snd));
-    let dump_thread = priority_thread_spawn!("dump_fill", dump_task(dr, &dump_rcv, &signal_rcv));
-    let trigger_thread = priority_thread_spawn!("dump_trig", trigger_task(&signal_snd, &socket));
-    let capture_thread = priority_thread_spawn!("capture", pcap_task(cap, &packet_snd, &stat_snd));
+    thread_spawn! {
+        "monitor": monitor_task(&stat_rcv, &all_chans),
+        "dummy_exfil": dummy_consumer(&stokes_rcv),
+        "downsample": downsample_task(&payload_rcv, &stokes_snd, &dump_snd, cli.downsample),
+        "decode": decode_task(&packet_rcv, &payload_snd),
+        "dump_fill": dump_task(dr, &dump_rcv, &signal_rcv),
+        "dump_trig": trigger_task(&signal_snd, &socket),
+        "capture": pcap_task(cap, &packet_snd, &stat_snd)
+    }
 
     // Start the tui maybe (on the main thread)
     if cli.tui {
         Tui::start()?;
     }
-
-    // Join the threads into the main task once they bail
-    process_thread.join().unwrap();
-    monitor_thread.join().unwrap();
-    capture_thread.join().unwrap();
-    dummy_thread.join().unwrap();
-    decode_thread.join().unwrap();
-    dump_thread.join().unwrap();
-    trigger_thread.join().unwrap();
 
     Ok(())
 }

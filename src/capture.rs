@@ -1,7 +1,7 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
 use crate::common::Payload;
-use crossbeam_channel::{Receiver, Sender};
+use crossbeam::channel::{Receiver, Sender};
 use log::info;
 use num_complex::Complex;
 use pcap::Stat;

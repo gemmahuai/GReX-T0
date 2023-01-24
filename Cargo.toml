@@ -11,10 +11,6 @@ num-complex = "0.4"
 pcap = "1"
 tui = "0.19"
 crossterm = "0.25"
-# We could switch to kanal for faster spsc channels, 
-# but I think crossbeam is good enough, and doesn't use unsafe
-crossbeam-channel = "0.5"
-thread-priority = "0.10.0"
 anyhow = "1"
 log = "0.4"
 tui-logger = "0.8"
@@ -22,6 +18,9 @@ pretty_env_logger = "0.4"
 hdf5 = "0.8"
 ndarray = "0.15"
 polling = "2"
+# We could switch to kanal for faster spsc channels, 
+# but I think crossbeam is good enough, and doesn't use unsafe
+crossbeam = "0.8"
 #psrdada = "0.2"
 #casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1" }
 #sigproc_filterbank = "0.2"

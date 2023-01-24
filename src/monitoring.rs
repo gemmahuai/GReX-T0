@@ -1,5 +1,5 @@
 use crate::common::AllChans;
-use crossbeam_channel::Receiver;
+use crossbeam::channel::Receiver;
 use log::info;
 use pcap::Stat;
 use std::time::Instant;

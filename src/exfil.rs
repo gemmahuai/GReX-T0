@@ -1,5 +1,5 @@
 use crate::common::Stokes;
-use crossbeam_channel::Receiver;
+use crossbeam::channel::Receiver;
 
 #[allow(clippy::missing_panics_doc)]
 pub fn dummy_consumer(receiver: &Receiver<Stokes>) {

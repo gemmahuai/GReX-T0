@@ -1,7 +1,7 @@
 //! Inter-thread processing (downsampling, voltage ring buffer, etc)
 
 use crate::common::{Payload, Stokes, CHANNELS};
-use crossbeam_channel::{Receiver, Sender};
+use crossbeam::channel::{Receiver, Sender};
 use log::info;
 
 /// Fake middleman function to test throughput
@@ -49,7 +49,7 @@ pub fn downsample_task(
         // The immediately send it to the ringbuffer
         while dump_send.is_full() {}
         // This will panic on real errors, which we want
-        dump_send.try_send(payload.clone()).unwrap();
+        dump_send.try_send(payload).unwrap();
         // Calculate stokes into the averaging buf
         avg.iter_mut()
             .zip(payload.stokes_i())

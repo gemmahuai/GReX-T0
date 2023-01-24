@@ -1,7 +1,10 @@
 //! Dumping voltage data
 
 use crate::common::{Payload, CHANNELS};
-use crossbeam_channel::{Receiver, Sender};
+use crossbeam::{
+    channel::{Receiver, Sender},
+    queue::ArrayQueue,
+};
 use hdf5::File;
 use log::info;
 use ndarray::{s, Array4, ArrayView, Axis};
@@ -12,46 +15,37 @@ use std::net::UdpSocket;
 pub const TRIG_EVENT: usize = 42;
 
 pub struct DumpRing {
-    container: Vec<Payload>,
-    write_index: usize,
+    container: ArrayQueue<Payload>,
 }
 
 impl DumpRing {
     #[must_use]
     pub fn new(size: usize) -> Self {
         Self {
-            container: vec![Payload::default(); size],
-            write_index: 0,
+            container: ArrayQueue::new(size),
         }
     }
 
-    #[allow(clippy::cast_possible_truncation)]
     pub fn push(&mut self, payload: Payload) {
-        // Tail points to the oldest data, which we will overwrite
-        self.container[self.write_index] = payload;
-        // Then move the tail back to point to the new "oldest"
-        self.write_index = (self.write_index + 1) & (self.container.len() - 1);
+        self.container.force_push(payload);
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::missing_panics_doc)]
     pub fn pack(&self) -> Array4<i8> {
         // Memory order. ndarray is row major, so the *last* index is the fastest changing
         let mut buf = Array4::zeros((self.container.len(), 2, CHANNELS, 2));
-        // Start at the "oldest" and progress to the newest
-        buf.axis_iter_mut(Axis(0))
-            .enumerate()
-            .for_each(|(i, mut slice)| {
-                let pos = (self.write_index + i) % self.container.len();
-                // Safety: pos is confined to 0 to len - 1 mathematically
-                let (a, b) = unsafe { self.container.get_unchecked(pos) }.packed_pols();
-                let a = ArrayView::from_shape((CHANNELS, 2), a).expect("Failed to make array view");
-                let b = ArrayView::from_shape((CHANNELS, 2), b).expect("Failed to make array view");
-                // And assign
-                slice.slice_mut(s![0, .., ..]).assign(&a);
-                slice.slice_mut(s![1, .., ..]).assign(&b);
-            });
+        // Start at the "oldest" and progress to the newest, draining the queue
+        buf.axis_iter_mut(Axis(0)).for_each(|mut slice| {
+            let payload = self.container.pop().unwrap();
+            let (a, b) = payload.packed_pols();
+            let a = ArrayView::from_shape((CHANNELS, 2), a).expect("Failed to make array view");
+            let b = ArrayView::from_shape((CHANNELS, 2), b).expect("Failed to make array view");
+            // And assign
+            slice.slice_mut(s![0, .., ..]).assign(&a);
+            slice.slice_mut(s![1, .., ..]).assign(&b);
+        });
 
         buf
     }

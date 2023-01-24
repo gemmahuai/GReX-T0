@@ -18,7 +18,7 @@ pub fn dummy_downsample(
                 Err(_) => continue,
             };
         };
-        // And send the raw payload to the dumping ringbuffer
+        And send the raw payload to the dumping ringbuffer
         loop {
             if dump_send.try_send(payload).is_ok() {
                 break;
@@ -67,10 +67,10 @@ pub fn downsample_task(
         // Increment the idx
         idx = (idx + 1) % downsample_factor as usize;
         // And send the raw payload to the dumping ringbuffer
-        loop {
-            if dump_send.try_send(payload).is_ok() {
-                break;
-            }
-        }
+        // loop {
+        //     if dump_send.try_send(payload).is_ok() {
+        //         break;
+        //     }
+        // }
     }
 }

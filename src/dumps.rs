@@ -41,7 +41,6 @@ impl DumpRing {
             .new_dataset::<i8>()
             .chunk((1, 2, CHANNELS, 2))
             .shape((self.container.len(), 2, CHANNELS, 2))
-            .deflate(3)
             .create("voltages")?;
         // And then write in chunks, draining the buffer
         let mut idx = 0;

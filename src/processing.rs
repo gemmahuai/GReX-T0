@@ -18,7 +18,7 @@ pub fn dummy_downsample(
                 Err(_) => continue,
             };
         };
-        And send the raw payload to the dumping ringbuffer
+        // And send the raw payload to the dumping ringbuffer
         loop {
             if dump_send.try_send(payload).is_ok() {
                 break;

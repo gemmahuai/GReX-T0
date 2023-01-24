@@ -40,12 +40,14 @@ impl DumpRing {
         let ds = file
             .new_dataset::<i8>()
             .chunk((1, 2, CHANNELS, 2))
-            .shape((1.., 2, CHANNELS, 2))
+            .shape((self.container.len(), 2, CHANNELS, 2))
             .deflate(3)
             .create("voltages")?;
         // And then write in chunks, draining the buffer
+        let mut idx = 0;
         while let Some(pl) = self.container.pop() {
-            ds.write_slice(&pl.into_ndarray(), (1, .., .., ..))?;
+            ds.write_slice(&pl.into_ndarray(), (idx, .., .., ..))?;
+            idx += 1;
         }
         Ok(())
     }

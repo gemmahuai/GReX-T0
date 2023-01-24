@@ -110,15 +110,9 @@ pub fn pcap_task(
             }
         }
         if let Some(payload) = cap.next_payload() {
-            loop {
-                match packet_sender.try_send(payload) {
-                    Ok(_) => {
-                        count += 1;
-                        break;
-                    }
-                    Err(_) => continue,
-                }
-            }
+            while packet_sender.is_full() {}
+            packet_sender.try_send(payload).unwrap();
+            count += 1;
         }
     }
 }
@@ -132,11 +126,7 @@ pub fn decode_task(packet_receiver: &Receiver<RawPacket>, payload_sender: &Sende
                 Err(_) => continue,
             }
         };
-        loop {
-            match payload_sender.try_send(Payload::from_bytes(&v)) {
-                Ok(_) => break,
-                Err(_) => continue,
-            }
-        }
+        while payload_sender.is_full() {}
+        payload_sender.try_send(Payload::from_bytes(&v)).unwrap();
     }
 }

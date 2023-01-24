@@ -4,6 +4,7 @@ use crate::common::{Payload, Stokes, CHANNELS};
 use crossbeam_channel::{Receiver, Sender};
 use log::info;
 
+#[allow(clippy::missing_panics_doc)]
 pub fn dummy_downsample(
     payload_recv: &Receiver<Payload>,
     _: &Sender<Stokes>,
@@ -19,11 +20,9 @@ pub fn dummy_downsample(
             };
         };
         // And send the raw payload to the dumping ringbuffer
-        loop {
-            if dump_send.try_send(payload).is_ok() {
-                break;
-            }
-        }
+        while dump_send.is_full() {}
+        // We ensured we have space in the previous loop
+        dump_send.try_send(payload).unwrap();
     }
 }
 
@@ -46,6 +45,10 @@ pub fn downsample_task(
                 Err(_) => continue,
             };
         };
+        // The immediately send it to the ringbuffer
+        while dump_send.is_full() {}
+        // This will panic on real errors, which we want
+        dump_send.try_send(payload.clone()).unwrap();
         // Calculate stokes into the averaging buf
         avg.iter_mut()
             .zip(payload.stokes_i())
@@ -56,21 +59,12 @@ pub fn downsample_task(
             avg.iter_mut()
                 .for_each(|v| *v /= f32::from(downsample_factor));
             // And busy wait send out
-            loop {
-                if stokes_send.try_send(avg).is_ok() {
-                    break;
-                }
-            }
+            while stokes_send.is_full() {}
+            stokes_send.try_send(avg).unwrap();
             // And zero the averaging buf
             avg = [0f32; CHANNELS];
         }
         // Increment the idx
         idx = (idx + 1) % downsample_factor as usize;
-        // And send the raw payload to the dumping ringbuffer
-        // loop {
-        //     if dump_send.try_send(payload).is_ok() {
-        //         break;
-        //     }
-        // }
     }
 }

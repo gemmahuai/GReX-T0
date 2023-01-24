@@ -3,14 +3,13 @@
 use crate::capture::RawPacket;
 use crossbeam_channel::Receiver;
 use num_complex::Complex;
-use pcap::Stat;
 
 /// Number of frequency channels (set by gateware)
 pub const CHANNELS: usize = 2048;
 
 pub type Stokes = [f32; CHANNELS];
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct Payload {
     /// Number of packets since the first packet

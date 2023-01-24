@@ -90,11 +90,14 @@ fn pack_ring(c: &mut Criterion) {
 
 pub fn push_ring(c: &mut Criterion) {
     let mut dr = DumpRing::new(1_048_576);
-    let pl = Payload::default();
     c.bench_function("push ring", |b| {
-        b.iter(|| {
-            dr.push(black_box(pl));
-        })
+        b.iter_batched(
+            Payload::default,
+            |pl| {
+                dr.push(black_box(pl));
+            },
+            BatchSize::SmallInput,
+        )
     });
 }
 

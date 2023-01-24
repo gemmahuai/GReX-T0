@@ -9,7 +9,7 @@ pub const CHANNELS: usize = 2048;
 
 pub type Stokes = [f32; CHANNELS];
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 #[repr(C)]
 pub struct Payload {
     /// Number of packets since the first packet

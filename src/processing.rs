@@ -32,9 +32,6 @@ pub fn downsample_task(
     let mut idx = 0usize;
     loop {
         let payload = payload_recv.recv().unwrap();
-        // The immediately send it to the ringbuffer
-        // This will panic on real errors, which we want
-        dump_send.send(payload).unwrap();
         // Calculate stokes into the averaging buf
         avg.iter_mut()
             .zip(payload.stokes_i())
@@ -50,5 +47,7 @@ pub fn downsample_task(
         }
         // Increment the idx
         idx = (idx + 1) % downsample_factor as usize;
+        // This will panic on real errors, which we want
+        dump_send.send(payload).unwrap();
     }
 }

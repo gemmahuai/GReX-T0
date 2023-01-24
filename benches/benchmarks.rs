@@ -72,22 +72,6 @@ fn downsample_stokes(c: &mut Criterion) {
     group.finish();
 }
 
-fn pack_ring(c: &mut Criterion) {
-    let mut group = c.benchmark_group("pack ring");
-    group
-        .sample_size(10)
-        .measurement_time(Duration::from_secs(30));
-    group.bench_function("pack ring", |b| {
-        b.iter_batched(
-            // I can't benchmark anymore on my home PC because I don't have enough RAM
-            || DumpRing::new(1_048_576),
-            |dr| black_box(dr.pack()),
-            BatchSize::PerIteration,
-        )
-    });
-    group.finish();
-}
-
 pub fn push_ring(c: &mut Criterion) {
     let mut dr = DumpRing::new(1_048_576);
     c.bench_function("push ring", |b| {
@@ -101,5 +85,12 @@ pub fn push_ring(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, push_ring, downsample_stokes, pack_ring, decode);
+pub fn to_ndarray(c: &mut Criterion) {
+    let payload = Payload::default();
+    c.bench_function("payload to nd", |b| {
+        b.iter(|| black_box(payload.into_ndarray()))
+    });
+}
+
+criterion_group!(benches, push_ring, to_ndarray, downsample_stokes, decode);
 criterion_main!(benches);

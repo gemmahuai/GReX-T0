@@ -1,6 +1,7 @@
 //! Common types shared between tasks
 
 use crossbeam::channel::{Receiver, Sender};
+use ndarray::{s, Array3, Array4, ArrayView};
 use num_complex::Complex;
 
 /// Number of frequency channels (set by gateware)
@@ -70,6 +71,20 @@ impl Payload {
             )
         };
         (bytes_a, bytes_b)
+    }
+
+    #[allow(clippy::missing_panics_doc)]
+    #[must_use]
+    // ndarray of size [(pol_a,pol_b), CHANNELS, (re,im)]
+    pub fn into_ndarray(&self) -> Array3<i8> {
+        let mut buf = Array3::zeros((2, CHANNELS, 2));
+        let (a, b) = self.packed_pols();
+        let a = ArrayView::from_shape((CHANNELS, 2), a).expect("Failed to make array view");
+        let b = ArrayView::from_shape((CHANNELS, 2), b).expect("Failed to make array view");
+        // And assign
+        buf.slice_mut(s![0, .., ..]).assign(&a);
+        buf.slice_mut(s![1, .., ..]).assign(&b);
+        buf
     }
 }
 

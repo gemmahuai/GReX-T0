@@ -450,6 +450,7 @@ name = "grex_t0"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap 4.0.32",
  "clap_lex 0.3.0",
  "criterion",

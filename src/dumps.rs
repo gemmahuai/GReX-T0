@@ -1,12 +1,13 @@
 //! Dumping voltage data
 
 use crate::common::{Payload, CHANNELS};
+use chrono::Utc;
 use crossbeam::{
     channel::{Receiver, Sender},
     queue::ArrayQueue,
 };
 use hdf5::File;
-use log::info;
+use log::{info, warn};
 use ndarray::{s, Array4, ArrayView, Axis};
 use polling::{Event, Poller};
 use std::net::UdpSocket;
@@ -31,23 +32,22 @@ impl DumpRing {
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
-    #[must_use]
-    #[allow(clippy::missing_panics_doc)]
-    pub fn pack(&self) -> Array4<i8> {
-        // Memory order. ndarray is row major, so the *last* index is the fastest changing
-        let mut buf = Array4::zeros((self.container.len(), 2, CHANNELS, 2));
-        // Start at the "oldest" and progress to the newest, draining the queue
-        buf.axis_iter_mut(Axis(0)).for_each(|mut slice| {
-            let payload = self.container.pop().unwrap();
-            let (a, b) = payload.packed_pols();
-            let a = ArrayView::from_shape((CHANNELS, 2), a).expect("Failed to make array view");
-            let b = ArrayView::from_shape((CHANNELS, 2), b).expect("Failed to make array view");
-            // And assign
-            slice.slice_mut(s![0, .., ..]).assign(&a);
-            slice.slice_mut(s![1, .., ..]).assign(&b);
-        });
-
-        buf
+    #[allow(clippy::missing_errors_doc)]
+    pub fn dump(&self) -> anyhow::Result<()> {
+        // Filename with ISO 8610 standard format
+        let filename = format!("grex_dump-{}.h5", Utc::now().format("%Y%m%dT%H%M%S"));
+        let file = File::create(filename)?;
+        let ds = file
+            .new_dataset::<i8>()
+            .chunk((1, 2, CHANNELS, 2))
+            .shape((1.., 2, CHANNELS, 2))
+            .deflate(3)
+            .create("voltages")?;
+        // And then write in chunks, draining the buffer
+        while let Some(pl) = self.container.pop() {
+            ds.write_slice(&pl.into_ndarray(), (1, .., .., ..))?;
+        }
+        Ok(())
     }
 }
 
@@ -88,17 +88,10 @@ pub fn dump_task(
         // First check if we need to dump, as that takes priority
         if signal_reciever.try_recv().is_ok() {
             info!("Dumping ringbuffer");
-            // Dump
-            let file = File::create("voltages.h5").expect("Bad filename");
-            let group = file.create_group("dir").expect("Bad directory");
-            let builder = group.new_dataset_builder();
-            // Build the data to serialize
-            let packed = ring.pack();
-            // Finalize and write
-            builder
-                .with_data(&packed)
-                .create("voltages")
-                .expect("Failed to build dataset");
+            match ring.dump() {
+                Ok(_) => (),
+                Err(e) => warn!("Error in dumping buffer - {}", e),
+            }
         } else {
             // If we're not dumping, we're pushing data into the ringbuffer
             let payload = payload_reciever.recv().unwrap();

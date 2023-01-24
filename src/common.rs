@@ -1,7 +1,7 @@
 //! Common types shared between tasks
 
 use crossbeam::channel::{Receiver, Sender};
-use ndarray::{s, Array3, Array4, ArrayView};
+use ndarray::{s, Array3, ArrayView};
 use num_complex::Complex;
 
 /// Number of frequency channels (set by gateware)

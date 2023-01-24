@@ -8,7 +8,6 @@ use crossbeam::{
 };
 use hdf5::File;
 use log::{info, warn};
-use ndarray::{s, Array4, ArrayView, Axis};
 use polling::{Event, Poller};
 use std::net::UdpSocket;
 

@@ -22,6 +22,7 @@ polling = "2"
 # but I think crossbeam is good enough, and doesn't use unsafe
 crossbeam = "0.8"
 chrono = "0.4"
+nix = "0.26"
 #psrdada = "0.2"
 #casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1" }
 #sigproc_filterbank = "0.2"

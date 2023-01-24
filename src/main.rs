@@ -15,12 +15,21 @@ use grex_t0::{
     tui::Tui,
 };
 use log::LevelFilter;
+use nix::{
+    sched::{sched_setaffinity, CpuSet},
+    unistd::Pid,
+};
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 
 macro_rules! thread_spawn {
-    {$($thread_name:literal: $fcall:expr), +} => {
+    {$($cpu:literal: $thread_name:literal: $fcall:expr), +} => {
         thread::scope(|s| {
-            $(s.builder().name($thread_name.to_string()).spawn(|_| $fcall).unwrap();)+
+            $(s.builder().name($thread_name.to_string()).spawn(|_| {
+                let mut cpu_set = CpuSet::new();
+                cpu_set.set($cpu).unwrap();
+                sched_setaffinity(Pid::from_raw(0), &cpu_set).unwrap();
+                $fcall
+            }).unwrap();)+
         }).unwrap();
     };
 }
@@ -70,13 +79,13 @@ fn main() -> anyhow::Result<()> {
 
     // Start the threads
     thread_spawn! {
-        "monitor": monitor_task(&stat_rcv, &all_chans),
-        "dummy_exfil": dummy_consumer(&stokes_rcv),
-        "downsample": downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
-        "split": split_task(&payload_rcv, &downsamp_snd, &dump_snd),
-        "dump_fill": dump_task(dr, &dump_rcv, &signal_rcv),
-        "dump_trig": trigger_task(&signal_snd, &socket),
-        "capture": pcap_task(cap, &payload_snd, &stat_snd)
+        8  : "monitor"    : monitor_task(&stat_rcv, &all_chans),
+        9  : "dummy_exfil": dummy_consumer(&stokes_rcv),
+        10 : "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
+        11 : "split"      : split_task(&payload_rcv, &downsamp_snd, &dump_snd),
+        12 : "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv),
+        13 : "dump_trig"  : trigger_task(&signal_snd, &socket),
+        14 : "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
     }
 
     // Start the tui maybe (on the main thread)

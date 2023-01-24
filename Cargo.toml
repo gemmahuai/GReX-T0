@@ -24,7 +24,6 @@ crossbeam = "0.8"
 #psrdada = "0.2"
 #casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1" }
 #sigproc_filterbank = "0.2"
-crabgrind = "^0.1"
 
 [lib]
 name = "grex_t0"

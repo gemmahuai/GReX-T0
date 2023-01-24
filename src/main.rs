@@ -38,6 +38,10 @@ fn main() -> anyhow::Result<()> {
     // Get the CLI options
     let cli = args::Cli::parse();
 
+    // Set this thread to the first core on the NUMA node so our memory is in the right place
+    let mut cpu_set = CpuSet::new();
+    cpu_set.set(8).unwrap();
+
     // Only log to stdout if we're not tui-ing
     if cli.tui {
         tui_logger::init_logger(LevelFilter::Trace).expect("Couldn't setup the tui logger");
@@ -79,13 +83,13 @@ fn main() -> anyhow::Result<()> {
 
     // Start the threads
     thread_spawn! {
-        0  : "monitor"    : monitor_task(&stat_rcv, &all_chans),
-        1  : "dummy_exfil": dummy_consumer(&stokes_rcv),
-        2 : "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
-        3 : "split"      : split_task(&payload_rcv, &downsamp_snd, &dump_snd),
-        4 : "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv),
-        5 : "dump_trig"  : trigger_task(&signal_snd, &socket),
-        6 : "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
+        9  : "monitor"    : monitor_task(&stat_rcv, &all_chans),
+        10 : "dummy_exfil": dummy_consumer(&stokes_rcv),
+        11 : "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
+        12 : "split"      : split_task(&payload_rcv, &downsamp_snd, &dump_snd),
+        13 : "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv),
+        14 : "dump_trig"  : trigger_task(&signal_snd, &socket),
+        15 : "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
     }
 
     // Start the tui maybe (on the main thread)

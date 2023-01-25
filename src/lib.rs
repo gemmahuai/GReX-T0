@@ -11,4 +11,3 @@ pub mod exfil;
 pub mod fpga;
 pub mod monitoring;
 pub mod processing;
-pub mod tui;

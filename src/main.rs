@@ -12,7 +12,6 @@ use grex_t0::{
     fpga::Device,
     monitoring::monitor_task,
     processing::downsample_task,
-    tui::Tui,
 };
 use log::{info, LevelFilter};
 use nix::{
@@ -33,14 +32,10 @@ fn main() -> anyhow::Result<()> {
     let mut cpu_set = CpuSet::new();
     cpu_set.set(cpus.next().unwrap()).unwrap();
 
-    // Only log to stdout if we're not tui-ing
-    if cli.tui {
-        tui_logger::init_logger(LevelFilter::Trace).expect("Couldn't setup the tui logger");
-    } else {
-        pretty_env_logger::formatted_builder()
-            .filter_level(LevelFilter::Info)
-            .init();
-    }
+    // Logger init
+    pretty_env_logger::formatted_builder()
+        .filter_level(LevelFilter::Info)
+        .init();
 
     // Setup NTP
     info!("Synchronizing time with NTP");
@@ -104,18 +99,13 @@ fn main() -> anyhow::Result<()> {
     }
 
     thread_spawn! {
-        "monitor"    : monitor_task(&stat_rcv, &all_chans),
+        "monitor"    : monitor_task(&stat_rcv, &all_chans, cli.metrics_port),
         "dummy_exfil": dummy_consumer(&stokes_rcv),
         "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
         "split"      : payload_split(&payload_rcv, &downsamp_snd, &dump_snd),
         "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv, &packet_start),
         "dump_trig"  : trigger_task(&signal_snd, &socket),
         "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
-    }
-
-    // Start the tui maybe (on the main thread)
-    if cli.tui {
-        Tui::start()?;
     }
 
     Ok(())

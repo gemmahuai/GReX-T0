@@ -14,16 +14,20 @@ crossbeam = "0.8"
 crossterm = "0.25"
 fixed = "1.21.0"
 hdf5 = "0.8"
+http-body-util = "0.1.0-rc.2" 
+hyper = { version = "1.0.0-rc.2", features = ["full"] }
+lazy_static = "1.4.0"
 log = "0.4"
+prometheus = "0.13"
 ndarray = "0.15"
 nix = "0.26"
 num-complex = "0.4"
 pcap = "1"
 polling = "2"
 pretty_env_logger = "0.4"
-tui = "0.19"
 regex = "1"
-rsntp = { version = "3.0.1", default-features = false, features = ["chrono"] }
+rsntp = "3"
+tokio = { version = "^1.0", features = ["macros", "rt-multi-thread"] }
 tui-logger = "0.8"
 
 [lib]

@@ -15,9 +15,9 @@ pub struct Cli {
     /// Port which we expect packets to be directed to
     #[arg(long, default_value_t = 65432)]
     pub trig_port: u16,
-    /// Whether to display a TUI
-    #[arg(long, short)]
-    pub tui: bool,
+    /// Port to respond to prometheus requests for metrics
+    #[arg(long, default_value_t = 8083)]
+    pub metrics_port: u16,
     /// Downsample factor
     #[arg(long, short, default_value_t = 4)]
     pub downsample: u16,

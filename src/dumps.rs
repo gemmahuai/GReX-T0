@@ -1,7 +1,7 @@
 //! Dumping voltage data
 
 use crate::common::{Payload, CHANNELS};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use crossbeam::{
     channel::{Receiver, Sender},
     queue::ArrayQueue,
@@ -32,7 +32,7 @@ impl DumpRing {
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
     #[allow(clippy::missing_errors_doc)]
-    pub fn dump(&self) -> anyhow::Result<()> {
+    pub fn dump(&self, start_time: &DateTime<Utc>) -> anyhow::Result<()> {
         // Filename with ISO 8610 standard format
         let filename = format!("grex_dump-{}.h5", Utc::now().format("%Y%m%dT%H%M%S"));
         let file = File::create(filename)?;
@@ -43,10 +43,15 @@ impl DumpRing {
             .create("voltages")?;
         // And then write in chunks, draining the buffer
         let mut idx = 0;
+        let mut payload_time = *start_time;
         while let Some(pl) = self.container.pop() {
             ds.write_slice(&pl.into_ndarray(), (idx, .., .., ..))?;
+            payload_time = pl.real_time(start_time);
             idx += 1;
         }
+        // Set the time attribute
+        let attr = ds.new_attr::<i64>().create("timestamp")?;
+        attr.write_scalar(&payload_time.timestamp_micros())?;
         Ok(())
     }
 }
@@ -82,13 +87,14 @@ pub fn dump_task(
     mut ring: DumpRing,
     payload_reciever: &Receiver<Payload>,
     signal_reciever: &Receiver<()>,
+    start_time: &DateTime<Utc>,
 ) -> ! {
     info!("Starting voltage ringbuffer fill task!");
     loop {
         // First check if we need to dump, as that takes priority
         if signal_reciever.try_recv().is_ok() {
             info!("Dumping ringbuffer");
-            match ring.dump() {
+            match ring.dump(start_time) {
                 Ok(_) => (),
                 Err(e) => warn!("Error in dumping buffer - {}", e),
             }

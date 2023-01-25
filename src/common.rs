@@ -1,11 +1,14 @@
 //! Common types shared between tasks
 
+use chrono::{DateTime, Utc};
 use crossbeam::channel::{Receiver, Sender};
 use ndarray::{s, Array3, ArrayView};
 use num_complex::Complex;
 
 /// Number of frequency channels (set by gateware)
 pub const CHANNELS: usize = 2048;
+/// How sure are we?
+pub const PACKET_CADENCE: f64 = 8.192e-6;
 
 pub type Stokes = [f32; CHANNELS];
 
@@ -85,6 +88,16 @@ impl Payload {
         buf.slice_mut(s![0, .., ..]).assign(&a);
         buf.slice_mut(s![1, .., ..]).assign(&b);
         buf
+    }
+
+    #[allow(clippy::missing_panics_doc)]
+    #[allow(clippy::cast_precision_loss)]
+    #[must_use]
+    /// Return the real UTC time of this packet
+    pub fn real_time(&self, start_time: &DateTime<Utc>) -> DateTime<Utc> {
+        let second_offset = self.count as f64 * PACKET_CADENCE;
+        *start_time
+            + chrono::Duration::from_std(std::time::Duration::from_secs_f64(second_offset)).unwrap()
     }
 }
 

@@ -49,7 +49,7 @@ fn main() -> anyhow::Result<()> {
 
     // Setup the FPGA
     let mut device = Device::new(cli.fpga_addr);
-    device.trigger(&time_sync);
+    let packet_start = device.trigger(&time_sync);
     if cli.trig {
         device.force_pps();
     }
@@ -108,7 +108,7 @@ fn main() -> anyhow::Result<()> {
         "dummy_exfil": dummy_consumer(&stokes_rcv),
         "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
         "split"      : split_task(&payload_rcv, &downsamp_snd, &dump_snd),
-        "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv),
+        "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv, &packet_start),
         "dump_trig"  : trigger_task(&signal_snd, &socket),
         "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
     }

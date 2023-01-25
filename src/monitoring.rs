@@ -4,17 +4,13 @@ use http_body_util::Full;
 use hyper::body::Bytes;
 use hyper::header::CONTENT_TYPE;
 use hyper::http::HeaderValue;
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
 use hyper::{Request, Response};
 use lazy_static::lazy_static;
 use log::info;
 use pcap::Stat;
 use prometheus::{register_gauge, register_gauge_vec, Encoder, Gauge, GaugeVec, TextEncoder};
 use std::convert::Infallible;
-use std::net::SocketAddr;
 use std::time::Instant;
-use tokio::net::TcpListener;
 
 lazy_static! {
     static ref CHANNEL_GAUGE: GaugeVec = register_gauge_vec!(
@@ -30,11 +26,15 @@ lazy_static! {
 }
 
 #[allow(clippy::missing_panics_doc)]
-async fn metrics(_: Request<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+#[allow(clippy::missing_errors_doc)]
+#[allow(clippy::unused_async)]
+pub async fn metrics(
+    _: Request<hyper::body::Incoming>,
+) -> Result<Response<Full<Bytes>>, Infallible> {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
-    let encoded = encoder.encode_to_string(&metric_families).unwrap();
-    let mut resp = Response::new(Full::new(encoded.into()));
+    let body_str = encoder.encode_to_string(&metric_families).unwrap();
+    let mut resp = Response::new(Full::new(body_str.into()));
     resp.headers_mut().insert(
         CONTENT_TYPE,
         HeaderValue::from_str(encoder.format_type()).unwrap(),
@@ -44,22 +44,13 @@ async fn metrics(_: Request<hyper::body::Incoming>) -> Result<Response<Full<Byte
 
 #[allow(clippy::cast_precision_loss)]
 #[allow(clippy::similar_names)]
-pub async fn monitor_task(
-    stat_receiver: &Receiver<Stat>,
-    all_chans: &AllChans,
-    metrics_port: u16,
-) -> ! {
+pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
     info!("Starting monitoring task!");
     let mut last_state = Instant::now();
     let mut last_rcv = 0;
     let mut last_drops = 0;
-    let mut header = false;
-
-    let addr = ([0, 0, 0, 0], metrics_port).into();
-    let listener = TcpListener::bind(addr).await.unwrap();
 
     loop {
-        let (stream, _) = listener.accept().await?;
         // Blocking here is ok, these are infrequent events
         let stat = stat_receiver.recv().expect("Stat receive channel error");
         let since_last = last_state.elapsed();
@@ -68,5 +59,20 @@ pub async fn monitor_task(
         let dps = (stat.dropped - last_drops) as f32 / since_last.as_secs_f32();
         last_rcv = stat.received;
         last_drops = stat.dropped;
+        // Update metrics
+        PPS_GAUGE.set(pps.into());
+        DPS_GAUGE.set(dps.into());
+        CHANNEL_GAUGE
+            .with_label_values(&["to_split"])
+            .set(all_chans.cap_payload.len() as f64);
+        CHANNEL_GAUGE
+            .with_label_values(&["to_downsample"])
+            .set(all_chans.payload_to_downsample.len() as f64);
+        CHANNEL_GAUGE
+            .with_label_values(&["to_dump"])
+            .set(all_chans.payload_to_ring.len() as f64);
+        CHANNEL_GAUGE
+            .with_label_values(&["to_exfil"])
+            .set(all_chans.stokes.len() as f64);
     }
 }

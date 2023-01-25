@@ -10,18 +10,21 @@ use grex_t0::{
     dumps::{dump_task, trigger_task, DumpRing},
     exfil::dummy_consumer,
     fpga::Device,
-    monitoring::monitor_task,
+    monitoring::{metrics, monitor_task},
     processing::downsample_task,
 };
+use hyper::{server::conn::http1, service::service_fn};
 use log::{info, LevelFilter};
 use nix::{
     sched::{sched_setaffinity, CpuSet},
     unistd::Pid,
 };
 use rsntp::SntpClient;
-use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
+use tokio::net::TcpListener;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Get the CLI options
     let cli = args::Cli::parse();
 
@@ -80,7 +83,6 @@ fn main() -> anyhow::Result<()> {
     socket.set_nonblocking(true)?;
 
     // Start the threads
-
     macro_rules! thread_spawn {
         {$($thread_name:literal: $fcall:expr), +} => {
             std::thread::scope(|s| {
@@ -97,9 +99,8 @@ fn main() -> anyhow::Result<()> {
             });
         };
     }
-
     thread_spawn! {
-        "monitor"    : monitor_task(&stat_rcv, &all_chans, cli.metrics_port),
+        "monitor"    : monitor_task(&stat_rcv, &all_chans),
         "dummy_exfil": dummy_consumer(&stokes_rcv),
         "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
         "split"      : payload_split(&payload_rcv, &downsamp_snd, &dump_snd),
@@ -108,5 +109,18 @@ fn main() -> anyhow::Result<()> {
         "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
     }
 
-    Ok(())
+    // And then finally spin up the webserver for metrics on the main thread
+    let addr = SocketAddr::from(([0, 0, 0, 0], cli.metrics_port));
+    let listener = TcpListener::bind(addr).await?;
+    loop {
+        let (stream, _) = listener.accept().await?;
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(stream, service_fn(metrics))
+                .await
+            {
+                println!("Error serving connection: {err:?}");
+            }
+        });
+    }
 }

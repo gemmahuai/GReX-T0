@@ -21,4 +21,11 @@ pub struct Cli {
     /// Voltage buffer size as a power of 2. Defaults to 2^22, or ~34 seconds
     #[arg(long, short, default_value_t = 22)]
     pub vbuf_power: u32,
+    /// CPU cores to which we'll build tasks. They should share a NUMA node. Ex: 8:14
+    #[arg(long, default_value = "8:14")]
+    pub core_range: String,
+}
+
+fn parse_core_range(input: &str) -> [usize; 8] {
+    todo!()
 }

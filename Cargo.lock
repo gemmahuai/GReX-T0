@@ -465,6 +465,7 @@ dependencies = [
  "polling",
  "pretty_env_logger",
  "rand",
+ "regex",
  "tui",
  "tui-logger",
 ]

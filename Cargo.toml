@@ -4,28 +4,23 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1"
+chrono = "0.4"
 clap = { version = "=4.0", features = ["derive"] }
-# Pinned because MSRV, remove when Guix supports 1.64 and bump clap to 4.1
 clap_lex = "=0.3.0"
+crossbeam = "0.8"
+crossterm = "0.25"
+hdf5 = "0.8"
+log = "0.4"
+ndarray = "0.15"
+nix = "0.26"
 num-complex = "0.4"
 pcap = "1"
-tui = "0.19"
-crossterm = "0.25"
-anyhow = "1"
-log = "0.4"
-tui-logger = "0.8"
-pretty_env_logger = "0.4"
-hdf5 = "0.8"
-ndarray = "0.15"
 polling = "2"
-# We could switch to kanal for faster spsc channels, 
-# but I think crossbeam is good enough, and doesn't use unsafe
-crossbeam = "0.8"
-chrono = "0.4"
-nix = "0.26"
-#psrdada = "0.2"
-#casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1" }
-#sigproc_filterbank = "0.2"
+pretty_env_logger = "0.4"
+tui = "0.19"
+regex = "1"
+tui-logger = "0.8"
 
 [lib]
 name = "grex_t0"

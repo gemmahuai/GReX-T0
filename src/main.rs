@@ -6,7 +6,7 @@ pub use crossbeam::channel::bounded;
 use grex_t0::{
     args::{self, parse_core_range},
     capture::{pcap_task, Capture},
-    common::{split_task, AllChans},
+    common::{payload_split, AllChans},
     dumps::{dump_task, trigger_task, DumpRing},
     exfil::dummy_consumer,
     fpga::Device,
@@ -107,7 +107,7 @@ fn main() -> anyhow::Result<()> {
         "monitor"    : monitor_task(&stat_rcv, &all_chans),
         "dummy_exfil": dummy_consumer(&stokes_rcv),
         "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
-        "split"      : split_task(&payload_rcv, &downsamp_snd, &dump_snd),
+        "split"      : payload_split(&payload_rcv, &downsamp_snd, &dump_snd),
         "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv, &packet_start),
         "dump_trig"  : trigger_task(&signal_snd, &socket),
         "capture"    : pcap_task(cap, &payload_snd, &stat_snd)

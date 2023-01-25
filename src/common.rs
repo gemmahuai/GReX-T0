@@ -103,13 +103,16 @@ impl Payload {
 
 // Splits a channel with a clone
 #[allow(clippy::missing_panics_doc)]
-pub fn split_task<T>(rcv: &Receiver<T>, s1: &Sender<T>, s2: &Sender<T>)
-where
-    T: Clone,
-{
+pub fn payload_split(
+    rcv: &Receiver<Payload>,
+    to_downsample: &Sender<Payload>,
+    to_dumps: &Sender<Payload>,
+) {
     loop {
         let x = rcv.recv().unwrap();
-        s1.send(x.clone()).unwrap();
-        s2.send(x).unwrap();
+        // This should block if we get held up
+        to_downsample.send(x.clone()).unwrap();
+        // This one won't cause backpressure because that only will happen when we're doing IO
+        let _ = to_dumps.try_send(x);
     }
 }

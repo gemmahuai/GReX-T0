@@ -5,11 +5,14 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
+casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
+casperfpga_derive = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
 chrono = "0.4"
 clap = { version = "=4.0", features = ["derive"] }
 clap_lex = "=0.3.0"
 crossbeam = "0.8"
 crossterm = "0.25"
+fixed = "1.21.0"
 hdf5 = "0.8"
 log = "0.4"
 ndarray = "0.15"

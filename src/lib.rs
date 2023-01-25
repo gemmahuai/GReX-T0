@@ -8,6 +8,7 @@ pub mod capture;
 pub mod common;
 pub mod dumps;
 pub mod exfil;
+pub mod fpga;
 pub mod monitoring;
 pub mod processing;
 pub mod tui;

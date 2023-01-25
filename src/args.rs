@@ -1,4 +1,4 @@
-use std::ops::RangeInclusive;
+use std::{net::SocketAddr, ops::RangeInclusive};
 
 use clap::Parser;
 use regex::Regex;
@@ -27,6 +27,9 @@ pub struct Cli {
     /// CPU cores to which we'll build tasks. They should share a NUMA node.
     #[arg(long, default_value = "8:15")]
     pub core_range: String,
+    /// Socket address of the SNAP Board
+    #[arg(long, default_value = "192.168.0.5:69")]
+    pub fpga_addr: SocketAddr,
 }
 
 #[allow(clippy::missing_panics_doc)]

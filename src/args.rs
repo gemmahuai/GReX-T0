@@ -21,10 +21,10 @@ pub struct Cli {
     /// Downsample factor
     #[arg(long, short, default_value_t = 4)]
     pub downsample: u16,
-    /// Voltage buffer size as a power of 2. Defaults to 2^22, or ~34 seconds
+    /// Voltage buffer size as a power of 2
     #[arg(long, short, default_value_t = 22)]
     pub vbuf_power: u32,
-    /// CPU cores to which we'll build tasks. They should share a NUMA node. Ex: 8:14
+    /// CPU cores to which we'll build tasks. They should share a NUMA node.
     #[arg(long, default_value = "8:15")]
     pub core_range: String,
 }

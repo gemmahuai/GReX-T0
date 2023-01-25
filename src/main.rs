@@ -3,9 +3,8 @@
 
 pub use clap::Parser;
 pub use crossbeam::channel::bounded;
-use crossbeam::thread;
 use grex_t0::{
-    args,
+    args::{self, parse_core_range},
     capture::{pcap_task, Capture},
     common::{split_task, AllChans},
     dumps::{dump_task, trigger_task, DumpRing},
@@ -21,26 +20,16 @@ use nix::{
 };
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 
-macro_rules! thread_spawn {
-    {$($cpu:literal: $thread_name:literal: $fcall:expr), +} => {
-        thread::scope(|s| {
-            $(s.builder().name($thread_name.to_string()).spawn(|_| {
-                let mut cpu_set = CpuSet::new();
-                cpu_set.set($cpu).unwrap();
-                sched_setaffinity(Pid::from_raw(0), &cpu_set).unwrap();
-                $fcall
-            }).unwrap();)+
-        }).unwrap();
-    };
-}
-
 fn main() -> anyhow::Result<()> {
     // Get the CLI options
     let cli = args::Cli::parse();
 
+    // Get the CPU core range
+    let mut cpus = parse_core_range(&cli.core_range);
+
     // Set this thread to the first core on the NUMA node so our memory is in the right place
     let mut cpu_set = CpuSet::new();
-    cpu_set.set(8).unwrap();
+    cpu_set.set(cpus.next().unwrap()).unwrap();
 
     // Only log to stdout if we're not tui-ing
     if cli.tui {
@@ -82,14 +71,32 @@ fn main() -> anyhow::Result<()> {
     socket.set_nonblocking(true)?;
 
     // Start the threads
+
+    macro_rules! thread_spawn {
+        {$($thread_name:literal: $fcall:expr), +} => {
+            std::thread::scope(|s| {
+              $(let cpu = cpus.next().unwrap();
+                std::thread::Builder::new()
+                    .name($thread_name.to_string())
+                    .spawn_scoped(s, move || {
+                        let mut cpu_set = CpuSet::new();
+                        cpu_set.set(cpu).unwrap();
+                        sched_setaffinity(Pid::from_raw(0), &cpu_set).unwrap();
+                        $fcall;
+                    })
+                    .unwrap();)+
+            });
+        };
+    }
+
     thread_spawn! {
-        9  : "monitor"    : monitor_task(&stat_rcv, &all_chans),
-        10 : "dummy_exfil": dummy_consumer(&stokes_rcv),
-        11 : "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
-        12 : "split"      : split_task(&payload_rcv, &downsamp_snd, &dump_snd),
-        13 : "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv),
-        14 : "dump_trig"  : trigger_task(&signal_snd, &socket),
-        15 : "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
+        "monitor"    : monitor_task(&stat_rcv, &all_chans),
+        "dummy_exfil": dummy_consumer(&stokes_rcv),
+        "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
+        "split"      : split_task(&payload_rcv, &downsamp_snd, &dump_snd),
+        "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv),
+        "dump_trig"  : trigger_task(&signal_snd, &socket),
+        "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
     }
 
     // Start the tui maybe (on the main thread)

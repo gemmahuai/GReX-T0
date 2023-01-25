@@ -1,4 +1,7 @@
+use std::ops::RangeInclusive;
+
 use clap::Parser;
+use regex::Regex;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -22,10 +25,19 @@ pub struct Cli {
     #[arg(long, short, default_value_t = 22)]
     pub vbuf_power: u32,
     /// CPU cores to which we'll build tasks. They should share a NUMA node. Ex: 8:14
-    #[arg(long, default_value = "8:14")]
+    #[arg(long, default_value = "8:15")]
     pub core_range: String,
 }
 
-fn parse_core_range(input: &str) -> [usize; 8] {
-    todo!()
+#[allow(clippy::missing_panics_doc)]
+#[must_use]
+pub fn parse_core_range(input: &str) -> RangeInclusive<usize> {
+    let re = Regex::new(r"(\d+):(\d+)").unwrap();
+    let cap = re.captures(input).unwrap();
+    let start: usize = cap[1].parse().unwrap();
+    let stop: usize = cap[2].parse().unwrap();
+    assert!((start > 0) && (stop > start), "Invalid CPU range");
+    let range = start..=stop;
+    assert!(start - stop + 1 >= 8, "Not enough CPU cores");
+    range
 }

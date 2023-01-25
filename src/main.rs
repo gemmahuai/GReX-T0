@@ -9,15 +9,17 @@ use grex_t0::{
     common::{split_task, AllChans},
     dumps::{dump_task, trigger_task, DumpRing},
     exfil::dummy_consumer,
+    fpga::Device,
     monitoring::monitor_task,
     processing::downsample_task,
     tui::Tui,
 };
-use log::LevelFilter;
+use log::{info, LevelFilter};
 use nix::{
     sched::{sched_setaffinity, CpuSet},
     unistd::Pid,
 };
+use rsntp::SntpClient;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 
 fn main() -> anyhow::Result<()> {
@@ -38,6 +40,18 @@ fn main() -> anyhow::Result<()> {
         pretty_env_logger::formatted_builder()
             .filter_level(LevelFilter::Info)
             .init();
+    }
+
+    // Setup NTP
+    info!("Synchronizing time with NTP");
+    let client = SntpClient::new();
+    let time_sync = client.synchronize(cli.ntp_addr).unwrap();
+
+    // Setup the FPGA
+    let mut device = Device::new(cli.fpga_addr);
+    device.trigger(&time_sync);
+    if cli.trig {
+        device.force_pps();
     }
 
     // Create the capture

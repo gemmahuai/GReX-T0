@@ -30,6 +30,12 @@ pub struct Cli {
     /// Socket address of the SNAP Board
     #[arg(long, default_value = "192.168.0.5:69")]
     pub fpga_addr: SocketAddr,
+    /// NTP server to synchronize against
+    #[arg(long, default_value = "pool.ntp.org")]
+    pub ntp_addr: String,
+    /// Force a pps trigger
+    #[arg(long)]
+    pub trig: bool,
 }
 
 #[allow(clippy::missing_panics_doc)]

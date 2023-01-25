@@ -820,6 +820,7 @@ dependencies = [
  "pretty_env_logger",
  "rand",
  "regex",
+ "rsntp",
  "tui",
  "tui-logger",
 ]
@@ -1605,6 +1606,15 @@ name = "regex-syntax"
 version = "0.6.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
+
+[[package]]
+name = "rsntp"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f30db9ec28a0ae9e8db8310c7474b034216ebe4298646e6b00da2c6e7a37670"
+dependencies = [
+ "chrono",
+]
 
 [[package]]
 name = "rustc-hash"

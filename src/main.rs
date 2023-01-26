@@ -14,7 +14,7 @@ use grex_t0::{
     processing::downsample_task,
 };
 use hyper::{server::conn::http1, service::service_fn};
-use log::{info, LevelFilter};
+use log::{error, info, LevelFilter};
 use nix::{
     sched::{sched_setaffinity, CpuSet},
     unistd::Pid,
@@ -85,21 +85,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Start the threads
     macro_rules! thread_spawn {
         {$($thread_name:literal: $fcall:expr), +} => {
-            std::thread::scope(|s| {
-              $(let cpu = cpus.next().unwrap();
+              vec![$({let cpu = cpus.next().unwrap();
                 std::thread::Builder::new()
                     .name($thread_name.to_string())
-                    .spawn_scoped(s, move || {
+                    .spawn( move || {
                         let mut cpu_set = CpuSet::new();
                         cpu_set.set(cpu).unwrap();
                         sched_setaffinity(Pid::from_raw(0), &cpu_set).unwrap();
                         $fcall;
                     })
-                    .unwrap();)+
-            });
+                    .unwrap()}),+]
         };
     }
-    thread_spawn! {
+    let handles = thread_spawn! {
         "monitor"    : monitor_task(&stat_rcv, &all_chans),
         "dummy_exfil": dummy_consumer(&stokes_rcv),
         "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
@@ -107,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv, &packet_start),
         "dump_trig"  : trigger_task(&signal_snd, &socket),
         "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
-    }
+    };
 
     // And then finally spin up the webserver for metrics on the main thread
     info!("Starting metrics webserver");
@@ -115,7 +113,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let listener = TcpListener::bind(addr).await?;
     info!("Metrics server running!");
     loop {
-        let (stream, _) = listener.accept().await?;
+        let stream = match listener.accept().await {
+            Ok((stream, _)) => stream,
+            Err(e) => {
+                error!("TCP accept error: {}", e);
+                break;
+            }
+        };
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .serve_connection(stream, service_fn(metrics))
@@ -125,4 +129,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         });
     }
+    // Join them all when we kill the task
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    Ok(())
 }

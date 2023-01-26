@@ -6,6 +6,7 @@ use casperfpga::transport::{
 };
 use casperfpga_derive::fpga_from_fpg;
 use chrono::{DateTime, TimeZone, Utc};
+use fixed::types::U32F0;
 use rsntp::SynchronizationResult;
 use std::net::SocketAddr;
 
@@ -25,6 +26,9 @@ impl Device {
             fpga.transport.lock().unwrap().is_running().unwrap(),
             "SNAP board is not programmed/running"
         );
+        // Setup gain and requant factors
+        fpga.requant_gain.write(&U32F0::from_num(1)).unwrap();
+        fpga.fft_shift.write(&U32F0::from_num(4095)).unwrap();
         Self { fpga }
     }
 

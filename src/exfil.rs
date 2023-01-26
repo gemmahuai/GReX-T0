@@ -20,7 +20,8 @@ pub fn dummy_consumer(receiver: &Receiver<Stokes>, avg_snd: &Sender<[f64; CHANNE
             // Find the average into an f32 (which is lossless)
             avg.iter_mut()
                 .for_each(|v| *v /= MONITOR_SPEC_DOWNSAMPLE_FACTOR as f64);
-            avg_snd.send(avg).unwrap();
+            // Don't block here
+            let _ = avg_snd.try_send(avg);
             // And zero the averaging buf
             avg = [0f64; CHANNELS];
         }

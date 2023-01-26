@@ -22,7 +22,7 @@ lazy_static! {
     static ref PPS_GAUGE: Gauge =
         register_gauge!("pps", "Number of packets we're processing per second").unwrap();
     static ref DPS_GAUGE: Gauge =
-        register_gauge!("pps", "Number of packets we're processing per second").unwrap();
+        register_gauge!("dps", "Number of packets we're dropping per second").unwrap();
 }
 
 #[allow(clippy::missing_panics_doc)]

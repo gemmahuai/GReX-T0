@@ -66,6 +66,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (stokes_snd, stokes_rcv) = bounded(100);
     // Triggers for dumping ring
     let (signal_snd, signal_rcv) = bounded(100);
+    // Average stokes data for monitoring
+    let (avg_stokes_snd, avg_stokes_rcv) = bounded(100);
 
     // Create the collection of channels that we can monitor
     let all_chans = AllChans {
@@ -98,8 +100,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         };
     }
     let handles = thread_spawn! {
-        "monitor"    : monitor_task(&stat_rcv, &all_chans),
-        "dummy_exfil": dummy_consumer(&stokes_rcv),
+        "monitor"    : monitor_task(&stat_rcv, &avg_stokes_rcv, &all_chans),
+        "dummy_exfil": dummy_consumer(&stokes_rcv, &avg_stokes_snd),
         "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
         "split"      : payload_split(&payload_rcv, &downsamp_snd, &dump_snd),
         "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv, &packet_start),

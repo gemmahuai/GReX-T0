@@ -1,9 +1,30 @@
-use crate::common::Stokes;
-use crossbeam::channel::Receiver;
+use crate::common::{Stokes, CHANNELS};
+use crossbeam::channel::{Receiver, Sender};
+
+// FIXME
+const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 1024;
 
 #[allow(clippy::missing_panics_doc)]
-pub fn dummy_consumer(receiver: &Receiver<Stokes>) {
+#[allow(clippy::cast_precision_loss)]
+pub fn dummy_consumer(receiver: &Receiver<Stokes>, avg_snd: &Sender<[f64; CHANNELS]>) {
+    let mut avg = [0f64; CHANNELS];
+    let mut idx = 0usize;
     loop {
-        receiver.recv().unwrap();
+        let stokes = receiver.recv().unwrap();
+        // Copy stokes into average buf
+        avg.iter_mut()
+            .zip(stokes)
+            .for_each(|(x, y)| *x += f64::from(y));
+        // If we're at the end, we're done
+        if idx == MONITOR_SPEC_DOWNSAMPLE_FACTOR - 1 {
+            // Find the average into an f32 (which is lossless)
+            avg.iter_mut()
+                .for_each(|v| *v /= MONITOR_SPEC_DOWNSAMPLE_FACTOR as f64);
+            avg_snd.send(avg).unwrap();
+            // And zero the averaging buf
+            avg = [0f64; CHANNELS];
+        }
+        // Increment the idx
+        idx = (idx + 1) % MONITOR_SPEC_DOWNSAMPLE_FACTOR;
     }
 }

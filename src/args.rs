@@ -31,7 +31,7 @@ pub struct Cli {
     #[arg(long, default_value = "192.168.0.5:69")]
     pub fpga_addr: SocketAddr,
     /// NTP server to synchronize against
-    #[arg(long, default_value = "pool.ntp.org")]
+    #[arg(long, default_value = "time.google.com")]
     pub ntp_addr: String,
     /// Force a pps trigger
     #[arg(long)]

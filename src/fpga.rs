@@ -27,7 +27,7 @@ impl Device {
             "SNAP board is not programmed/running"
         );
         // Setup gain and requant factors
-        fpga.requant_gain.write(&U32F0::from_num(1)).unwrap();
+        fpga.requant_gain.write(&U32F0::from_num(10)).unwrap();
         fpga.fft_shift.write(&U32F0::from_num(4095)).unwrap();
         Self { fpga }
     }

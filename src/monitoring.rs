@@ -34,6 +34,7 @@ pub async fn metrics(
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let body_str = encoder.encode_to_string(&metric_families).unwrap();
+    info!("{}", body_str);
     let mut resp = Response::new(Full::new(body_str.into()));
     resp.headers_mut().insert(
         CONTENT_TYPE,
@@ -49,7 +50,6 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
     let mut last_state = Instant::now();
     let mut last_rcv = 0;
     let mut last_drops = 0;
-
     loop {
         // Blocking here is ok, these are infrequent events
         let stat = stat_receiver.recv().expect("Stat receive channel error");
@@ -59,6 +59,7 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
         let dps = (stat.dropped - last_drops) as f32 / since_last.as_secs_f32();
         last_rcv = stat.received;
         last_drops = stat.dropped;
+        info!("Updating metrics");
         // Update metrics
         PPS_GAUGE.set(pps.into());
         DPS_GAUGE.set(dps.into());

@@ -62,11 +62,13 @@ pub fn monitor_task(
     loop {
         // Blocking here is ok, these are infrequent events
         let stat = stat_receiver.recv().unwrap();
+        let since_last = last_state.elapsed();
+        last_state = Instant::now();
+
+        // Then wait for spectrum
         let avg_spec = spec_rcv.recv().unwrap();
 
         // Process packet stats
-        let since_last = last_state.elapsed();
-        last_state = Instant::now();
         let pps = (stat.received - last_rcv) as f32 / since_last.as_secs_f32();
         let dps = (stat.dropped - last_drops) as f32 / since_last.as_secs_f32();
         last_rcv = stat.received;

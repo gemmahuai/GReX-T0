@@ -8,15 +8,17 @@ use hyper::{Request, Response};
 use lazy_static::lazy_static;
 use log::info;
 use pcap::Stat;
-use prometheus::{register_gauge, register_gauge_vec, Encoder, Gauge, GaugeVec, TextEncoder};
+use prometheus::{
+    register_gauge, register_int_gauge_vec, Encoder, Gauge, IntGaugeVec, TextEncoder,
+};
 use std::convert::Infallible;
 use std::time::Instant;
 
 lazy_static! {
-    static ref CHANNEL_GAUGE: GaugeVec = register_gauge_vec!(
+    static ref CHANNEL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
         "task_channel_backlog",
         "Number of yet-to-be-processed data in each inter-task channel",
-        &["to_split", "to_downsample", "to_dump", "to_exfil"]
+        &["target_channel"]
     )
     .unwrap();
     static ref PPS_GAUGE: Gauge =
@@ -45,6 +47,7 @@ pub async fn metrics(
 
 #[allow(clippy::cast_precision_loss)]
 #[allow(clippy::similar_names)]
+#[allow(clippy::missing_panics_doc)]
 pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
     info!("Starting monitoring task!");
     let mut last_state = Instant::now();
@@ -65,15 +68,15 @@ pub fn monitor_task(stat_receiver: &Receiver<Stat>, all_chans: &AllChans) -> ! {
         DPS_GAUGE.set(dps.into());
         CHANNEL_GAUGE
             .with_label_values(&["to_split"])
-            .set(all_chans.cap_payload.len() as f64);
+            .set(all_chans.cap_payload.len().try_into().unwrap());
         CHANNEL_GAUGE
             .with_label_values(&["to_downsample"])
-            .set(all_chans.payload_to_downsample.len() as f64);
+            .set(all_chans.payload_to_downsample.len().try_into().unwrap());
         CHANNEL_GAUGE
             .with_label_values(&["to_dump"])
-            .set(all_chans.payload_to_ring.len() as f64);
+            .set(all_chans.payload_to_ring.len().try_into().unwrap());
         CHANNEL_GAUGE
             .with_label_values(&["to_exfil"])
-            .set(all_chans.stokes.len() as f64);
+            .set(all_chans.stokes.len().try_into().unwrap());
     }
 }

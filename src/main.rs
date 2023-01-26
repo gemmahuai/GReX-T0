@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // And then finally spin up the webserver for metrics on the main thread
     info!("Starting metrics webserver");
-    let addr = SocketAddr::from(([127, 0, 0, 1], cli.metrics_port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], cli.metrics_port));
     let listener = TcpListener::bind(addr).await?;
     loop {
         let stream = match listener.accept().await {

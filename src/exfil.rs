@@ -1,8 +1,8 @@
 use crate::common::{Stokes, CHANNELS};
 use crossbeam::channel::{Receiver, Sender};
 
-// FIXME
-const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 16384;
+// FIXME (10s)
+const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
 
 #[allow(clippy::missing_panics_doc)]
 #[allow(clippy::cast_precision_loss)]

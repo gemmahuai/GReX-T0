@@ -111,7 +111,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Starting metrics webserver");
     let addr = SocketAddr::from(([127, 0, 0, 1], cli.metrics_port));
     let listener = TcpListener::bind(addr).await?;
-    info!("Metrics server running!");
     loop {
         let stream = match listener.accept().await {
             Ok((stream, _)) => stream,
@@ -120,9 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 break;
             }
         };
-        info!("Connected to client");
         tokio::task::spawn(async move {
-            info!("Sending response");
             if let Err(err) = http1::Builder::new()
                 .serve_connection(stream, service_fn(metrics))
                 .await

@@ -120,7 +120,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 break;
             }
         };
+        info!("Connected to client");
         tokio::task::spawn(async move {
+            info!("Sending response");
             if let Err(err) = http1::Builder::new()
                 .serve_connection(stream, service_fn(metrics))
                 .await

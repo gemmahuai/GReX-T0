@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Setup NTP
     info!("Synchronizing time with NTP");
     let client = SntpClient::new();
-    let time_sync = client.synchronize(cli.ntp_addr).unwrap();
+    let time_sync = client.synchronize("us.pool.ntp.org").unwrap();
 
     // Setup the FPGA
     let mut device = Device::new(cli.fpga_addr);

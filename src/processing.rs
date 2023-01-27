@@ -19,7 +19,7 @@ pub fn downsample_task(
         // Calculate stokes into the averaging buf
         avg.iter_mut()
             .zip(payload.stokes_i())
-            .for_each(|(x, y)| *x += f32::from(y));
+            .for_each(|(x, y)| *x += y);
         // If we're at the end, we're done
         if idx == downsample_factor as usize - 1 {
             // Find the average into an f32 (which is lossless)

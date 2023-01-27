@@ -1,5 +1,7 @@
 //! Common types shared between tasks
 
+use core::num;
+
 use chrono::{DateTime, Utc};
 use crossbeam::channel::{Receiver, Sender};
 use ndarray::{s, Array3, ArrayView};
@@ -43,11 +45,16 @@ impl Payload {
     #[allow(clippy::missing_panics_doc)]
     #[allow(clippy::cast_sign_loss)]
     #[must_use]
-    pub fn stokes_i(&self) -> [u16; CHANNELS] {
-        let mut stokes = [0u16; CHANNELS];
+    pub fn stokes_i(&self) -> [f32; CHANNELS] {
+        let i8_max = f32::from(i8::MAX);
+        let mut stokes = [0.0; CHANNELS];
+
         for (i, (a, b)) in self.pol_a.into_iter().zip(self.pol_b).enumerate() {
-            stokes[i] =
-                ((i16::from(a.re) * i16::from(a.im)) + (i16::from(b.re) * i16::from(b.im))) as u16;
+            let a_re = f32::from(a.re) / i8_max;
+            let a_im = f32::from(a.im) / i8_max;
+            let b_re = f32::from(b.re) / i8_max;
+            let b_im = f32::from(b.im) / i8_max;
+            stokes[i] = a_re * a_re + a_im * a_im + b_re * b_re + b_im * b_im;
         }
         stokes
     }

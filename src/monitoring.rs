@@ -13,7 +13,7 @@ use prometheus::{
     IntGaugeVec, TextEncoder,
 };
 use std::convert::Infallible;
-use std::time::Instant;
+use std::time::Duration;
 
 lazy_static! {
     static ref CHANNEL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
@@ -51,26 +51,23 @@ pub async fn metrics(
 #[allow(clippy::similar_names)]
 #[allow(clippy::missing_panics_doc)]
 pub fn monitor_task(
-    stat_receiver: &Receiver<Stat>,
+    stat_receiver: &Receiver<(Stat, Duration)>,
     spec_rcv: &Receiver<[f64; CHANNELS]>,
     all_chans: &AllChans,
 ) -> ! {
     info!("Starting monitoring task!");
-    let mut last_state = Instant::now();
     let mut last_rcv = 0;
     let mut last_drops = 0;
     loop {
         // Blocking here is ok, these are infrequent events
-        let stat = stat_receiver.recv().unwrap();
-        let since_last = last_state.elapsed();
-        last_state = Instant::now();
+        let (stat, dur) = stat_receiver.recv().unwrap();
 
         // Then wait for spectrum
         let avg_spec = spec_rcv.recv().unwrap();
 
         // Process packet stats
-        let pps = (stat.received - last_rcv) as f32 / since_last.as_secs_f32();
-        let dps = (stat.dropped - last_drops) as f32 / since_last.as_secs_f32();
+        let pps = (stat.received - last_rcv) as f32 / dur.as_secs_f32();
+        let dps = (stat.dropped - last_drops) as f32 / dur.as_secs_f32();
         last_rcv = stat.received;
         last_drops = stat.dropped;
 

@@ -1,7 +1,5 @@
 //! Common types shared between tasks
 
-use core::num;
-
 use chrono::{DateTime, Utc};
 use crossbeam::channel::{Receiver, Sender};
 use ndarray::{s, Array3, ArrayView};
@@ -54,7 +52,7 @@ impl Payload {
             let a_im = f32::from(a.im) / i8_max;
             let b_re = f32::from(b.re) / i8_max;
             let b_im = f32::from(b.im) / i8_max;
-            stokes[i] = a_re * a_re + a_im * a_im + b_re * b_re + b_im * b_im;
+            stokes[i] = (a_re * a_re + a_im * a_im + b_re * b_re + b_im * b_im) / 4.0;
         }
         stokes
     }

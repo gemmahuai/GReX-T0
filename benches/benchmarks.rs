@@ -3,10 +3,18 @@ use std::time::Instant;
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use grex_t0::{
     capture::PAYLOAD_SIZE,
-    common::{Payload, CHANNELS},
+    common::{stokes_i, Channel, Payload, CHANNELS},
     dumps::DumpRing,
 };
 use rand::prelude::*;
+
+pub fn stokes(c: &mut Criterion) {
+    let pola = [Channel::default(); CHANNELS];
+    let polb = [Channel::default(); CHANNELS];
+    c.bench_function("stokes i", |b| {
+        b.iter(|| stokes_i(black_box(&pola), black_box(&polb)))
+    });
+}
 
 fn decode(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
@@ -52,7 +60,7 @@ fn downsample_stokes(c: &mut Criterion) {
                     for i in 0..iters {
                         avg.iter_mut()
                             .zip(payloads[i as usize].stokes_i())
-                            .for_each(|(x, y)| *x += f32::from(y));
+                            .for_each(|(x, y)| *x += y);
                         // If we're at the end, calculate the average
                         if idx == downsample_factor - 1 {
                             // Find the average into an f32 (which is lossless)
@@ -92,5 +100,12 @@ pub fn to_ndarray(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, push_ring, to_ndarray, downsample_stokes, decode);
+criterion_group!(
+    benches,
+    stokes,
+    push_ring,
+    to_ndarray,
+    downsample_stokes,
+    decode
+);
 criterion_main!(benches);

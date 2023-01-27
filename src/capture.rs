@@ -1,9 +1,8 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
-use crate::common::Payload;
+use crate::common::{Channel, Payload};
 use crossbeam::channel::Sender;
 use log::info;
-use num_complex::Complex;
 use pcap::Stat;
 
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
@@ -30,10 +29,10 @@ impl Payload {
             // Each word contains two frequencies for each polarization
             // [A1 B1 A2 B2]
             // Where each channel is [Re Im] as FixedI8<7>
-            payload.pol_a[2 * i] = Complex::new(word[0] as i8, word[1] as i8);
-            payload.pol_a[2 * i + 1] = Complex::new(word[4] as i8, word[5] as i8);
-            payload.pol_b[2 * i] = Complex::new(word[2] as i8, word[3] as i8);
-            payload.pol_b[2 * i + 1] = Complex::new(word[6] as i8, word[7] as i8);
+            payload.pol_a[2 * i] = Channel::new(word[0] as i8, word[1] as i8);
+            payload.pol_a[2 * i + 1] = Channel::new(word[4] as i8, word[5] as i8);
+            payload.pol_b[2 * i] = Channel::new(word[2] as i8, word[3] as i8);
+            payload.pol_b[2 * i + 1] = Channel::new(word[6] as i8, word[7] as i8);
         }
         // Then unpack the timestamp/order
         payload.count = u64::from_be_bytes(

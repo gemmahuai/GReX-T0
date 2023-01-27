@@ -12,12 +12,48 @@ pub const PACKET_CADENCE: f64 = 8.192e-6;
 
 pub type Stokes = [f32; CHANNELS];
 
+/// The complex number representing the value of a channel
+#[derive(Debug, Clone, Copy)]
+pub struct Channel(Complex<i8>);
+
+impl Default for Channel {
+    fn default() -> Self {
+        Self(Complex { re: 0, im: 0 })
+    }
+}
+
+impl Channel {
+    #[must_use]
+    pub fn new(re: i8, im: i8) -> Self {
+        Self(Complex::new(re, im))
+    }
+
+    #[allow(clippy::cast_sign_loss)]
+    #[must_use]
+    pub fn abs_squared(&self) -> u16 {
+        let r = i16::from(self.0.re);
+        let i = i16::from(self.0.im);
+        (r * r + i * i) as u16
+    }
+}
+
+pub type Channels = [Channel; CHANNELS];
+
+#[must_use]
+pub fn stokes_i(a: &Channels, b: &Channels) -> Stokes {
+    let mut stokes = [0f32; CHANNELS];
+    for ((v, a), b) in stokes.iter_mut().zip(a).zip(b) {
+        *v = f32::from(a.abs_squared() + b.abs_squared()) / f32::from(u16::MAX);
+    }
+    stokes
+}
+
 #[derive(Debug, Clone)]
 pub struct Payload {
     /// Number of packets since the first packet
     pub count: u64,
-    pub pol_a: [Complex<i8>; CHANNELS],
-    pub pol_b: [Complex<i8>; CHANNELS],
+    pub pol_a: [Channel; CHANNELS],
+    pub pol_b: [Channel; CHANNELS],
 }
 
 #[derive(Debug)]
@@ -32,8 +68,8 @@ impl Default for Payload {
     fn default() -> Self {
         Self {
             count: Default::default(),
-            pol_a: [Complex::new(0, 0); CHANNELS],
-            pol_b: [Complex::new(0, 0); CHANNELS],
+            pol_a: [Channel::default(); CHANNELS],
+            pol_b: [Channel::default(); CHANNELS],
         }
     }
 }
@@ -43,18 +79,8 @@ impl Payload {
     #[allow(clippy::missing_panics_doc)]
     #[allow(clippy::cast_sign_loss)]
     #[must_use]
-    pub fn stokes_i(&self) -> [f32; CHANNELS] {
-        let i8_max = f32::from(i8::MAX);
-        let mut stokes = [0.0; CHANNELS];
-
-        for (i, (a, b)) in self.pol_a.into_iter().zip(self.pol_b).enumerate() {
-            let a_re = f32::from(a.re) / i8_max;
-            let a_im = f32::from(a.im) / i8_max;
-            let b_re = f32::from(b.re) / i8_max;
-            let b_im = f32::from(b.im) / i8_max;
-            stokes[i] = (a_re * a_re + a_im * a_im + b_re * b_re + b_im * b_im) / 4.0;
-        }
-        stokes
+    pub fn stokes_i(&self) -> Stokes {
+        stokes_i(&self.pol_a, &self.pol_b)
     }
 
     #[allow(clippy::missing_panics_doc)]

@@ -122,6 +122,8 @@ pub fn monitor_task(
                         .with_label_values(&["b"])
                         .observe(f64::from(chunk[3] as i8));
                 }
+            } else {
+                warn!("Error reading ADC snapshot");
             }
         }
 

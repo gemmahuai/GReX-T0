@@ -10,7 +10,7 @@ use lazy_static::lazy_static;
 use log::{info, warn};
 use pcap::Stat;
 use prometheus::{
-    register_gauge, register_gauge_vec, register_histogram_vec, register_int_gauge,
+    linear_buckets, register_gauge, register_gauge_vec, register_histogram_vec, register_int_gauge,
     register_int_gauge_vec, Encoder, Gauge, GaugeVec, HistogramVec, IntGauge, IntGaugeVec,
     TextEncoder,
 };
@@ -39,7 +39,8 @@ lazy_static! {
     static ref RAW_ADC_HIST: HistogramVec = register_histogram_vec!(
         "raw_adc_hist",
         "Histogram data for raw ADC counts",
-        &["polarization"]
+        &["polarization"],
+        linear_buckets(-127.0, 1.0, 256).unwrap()
     )
     .unwrap();
 }

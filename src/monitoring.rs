@@ -10,8 +10,9 @@ use lazy_static::lazy_static;
 use log::{info, warn};
 use pcap::Stat;
 use prometheus::{
-    register_gauge, register_gauge_vec, register_int_gauge, register_int_gauge_vec, Encoder, Gauge,
-    GaugeVec, IntGauge, IntGaugeVec, TextEncoder,
+    register_gauge, register_gauge_vec, register_histogram_vec, register_int_gauge,
+    register_int_gauge_vec, Encoder, Gauge, GaugeVec, HistogramVec, IntGauge, IntGaugeVec,
+    TextEncoder,
 };
 use std::convert::Infallible;
 use std::time::Duration;
@@ -35,6 +36,12 @@ lazy_static! {
         register_int_gauge!("requant_ovfl", "Counter of requantization overflows").unwrap();
     static ref FPGA_TEMP: Gauge =
         register_gauge!("fpga_temp", "Internal FPGA temperature").unwrap();
+    static ref RAW_ADC_HIST: HistogramVec = register_histogram_vec!(
+        "raw_adc_hist",
+        "Histogram data for raw ADC counts",
+        &["polarization"]
+    )
+    .unwrap();
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -94,6 +101,26 @@ pub fn monitor_task(
             FPGA_TEMP.set(v.try_into().unwrap());
         } else {
             warn!("Error reading from FPGA");
+        }
+
+        // Take a snapshot of ADC values and add to histogram
+        if device.fpga.adc_snap.arm().is_ok() && device.fpga.adc_snap.trigger().is_ok() {
+            if let Ok(v) = device.fpga.adc_snap.read() {
+                for chunk in v.chunks(4) {
+                    RAW_ADC_HIST
+                        .with_label_values(&["a"])
+                        .observe(f64::from(chunk[0]));
+                    RAW_ADC_HIST
+                        .with_label_values(&["a"])
+                        .observe(f64::from(chunk[1]));
+                    RAW_ADC_HIST
+                        .with_label_values(&["b"])
+                        .observe(f64::from(chunk[2]));
+                    RAW_ADC_HIST
+                        .with_label_values(&["b"])
+                        .observe(f64::from(chunk[3]));
+                }
+            }
         }
 
         // Update metrics

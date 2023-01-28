@@ -246,7 +246,7 @@ checksum = "dfb24e866b15a1af2a1b663f10c6b6b8f397a84aadb828f12e5b289ec23a3a3c"
 [[package]]
 name = "casper_utils"
 version = "0.1.0"
-source = "git+https://github.com/kiranshila/casperfpga_rs#bf6559519533db85be05fb45c1dfdddff43c9022"
+source = "git+https://github.com/kiranshila/casperfpga_rs#58ce65d013e7ae15cb37eada67652cc33506a3c2"
 dependencies = [
  "anyhow",
  "flate2",
@@ -258,7 +258,7 @@ dependencies = [
 [[package]]
 name = "casperfpga"
 version = "0.1.0"
-source = "git+https://github.com/kiranshila/casperfpga_rs#bf6559519533db85be05fb45c1dfdddff43c9022"
+source = "git+https://github.com/kiranshila/casperfpga_rs#58ce65d013e7ae15cb37eada67652cc33506a3c2"
 dependencies = [
  "anyhow",
  "casper_utils",
@@ -266,6 +266,7 @@ dependencies = [
  "fixed",
  "indicatif",
  "kstring",
+ "num-traits",
  "packed_struct",
  "paste",
  "tapcp",
@@ -276,7 +277,7 @@ dependencies = [
 [[package]]
 name = "casperfpga_derive"
 version = "0.1.0"
-source = "git+https://github.com/kiranshila/casperfpga_rs#bf6559519533db85be05fb45c1dfdddff43c9022"
+source = "git+https://github.com/kiranshila/casperfpga_rs#58ce65d013e7ae15cb37eada67652cc33506a3c2"
 dependencies = [
  "casper_utils",
  "kstring",
@@ -299,9 +300,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.0.78"
+version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a20104e2335ce8a659d6dd92a51a767a0c062599c73b343fd152cb401e828c3d"
+checksum = "50d30906286121d95be3d479533b458f87493b30a4b5f79a607db8f5d11aa91f"
 
 [[package]]
 name = "cexpr"
@@ -1945,7 +1946,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "tapcp"
 version = "0.1.0"
-source = "git+https://github.com/kiranshila/casperfpga_rs#bf6559519533db85be05fb45c1dfdddff43c9022"
+source = "git+https://github.com/kiranshila/casperfpga_rs#58ce65d013e7ae15cb37eada67652cc33506a3c2"
 dependencies = [
  "anyhow",
  "async-tftp",

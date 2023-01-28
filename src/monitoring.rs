@@ -63,6 +63,7 @@ pub async fn metrics(
 }
 
 #[allow(clippy::cast_precision_loss)]
+#[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::similar_names)]
 #[allow(clippy::missing_panics_doc)]
 pub fn monitor_task(
@@ -110,16 +111,16 @@ pub fn monitor_task(
                 for chunk in v.chunks(4) {
                     RAW_ADC_HIST
                         .with_label_values(&["a"])
-                        .observe(f64::from(chunk[0]));
+                        .observe(f64::from(chunk[0] as i8));
                     RAW_ADC_HIST
                         .with_label_values(&["a"])
-                        .observe(f64::from(chunk[1]));
+                        .observe(f64::from(chunk[1] as i8));
                     RAW_ADC_HIST
                         .with_label_values(&["b"])
-                        .observe(f64::from(chunk[2]));
+                        .observe(f64::from(chunk[2] as i8));
                     RAW_ADC_HIST
                         .with_label_values(&["b"])
-                        .observe(f64::from(chunk[3]));
+                        .observe(f64::from(chunk[3] as i8));
                 }
             }
         }

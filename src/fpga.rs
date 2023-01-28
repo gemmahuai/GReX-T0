@@ -13,7 +13,7 @@ use std::net::SocketAddr;
 fpga_from_fpg!(GrexFpga, "gateware/grex_gateware_2022-11-09_2251.fpg");
 
 pub struct Device {
-    fpga: GrexFpga<Tapcp>,
+    pub fpga: GrexFpga<Tapcp>,
 }
 
 impl Device {

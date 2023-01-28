@@ -1,4 +1,5 @@
 use crate::common::{AllChans, CHANNELS};
+use crate::fpga::Device;
 use crossbeam::channel::Receiver;
 use http_body_util::Full;
 use hyper::body::Bytes;
@@ -6,11 +7,11 @@ use hyper::header::CONTENT_TYPE;
 use hyper::http::HeaderValue;
 use hyper::{Request, Response};
 use lazy_static::lazy_static;
-use log::info;
+use log::{info, warn};
 use pcap::Stat;
 use prometheus::{
-    register_gauge, register_gauge_vec, register_int_gauge_vec, Encoder, Gauge, GaugeVec,
-    IntGaugeVec, TextEncoder,
+    register_gauge, register_gauge_vec, register_int_gauge, register_int_gauge_vec, Encoder, Gauge,
+    GaugeVec, IntGauge, IntGaugeVec, TextEncoder,
 };
 use std::convert::Infallible;
 use std::time::Duration;
@@ -28,6 +29,12 @@ lazy_static! {
         register_gauge!("pps", "Number of packets we're processing per second").unwrap();
     static ref DPS_GAUGE: Gauge =
         register_gauge!("dps", "Number of packets we're dropping per second").unwrap();
+    static ref FFT_OVFL_GAUGE: IntGauge =
+        register_int_gauge!("fft_ovfl", "Counter of FFT overflows").unwrap();
+    static ref REQUANT_OVFL_GAUGE: IntGauge =
+        register_int_gauge!("requant_ovfl", "Counter of requantization overflows").unwrap();
+    static ref FPGA_TEMP: Gauge =
+        register_gauge!("fpga_temp", "Internal FPGA temperature").unwrap();
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -54,6 +61,7 @@ pub fn monitor_task(
     stat_receiver: &Receiver<(Stat, Duration)>,
     spec_rcv: &Receiver<[f64; CHANNELS]>,
     all_chans: &AllChans,
+    device: &Device,
 ) -> ! {
     info!("Starting monitoring task!");
     let mut last_rcv = 0;
@@ -70,6 +78,23 @@ pub fn monitor_task(
         let dps = (stat.dropped - last_drops) as f32 / dur.as_secs_f32();
         last_rcv = stat.received;
         last_drops = stat.dropped;
+
+        // Metrics from the FPGA
+        if let Ok(v) = device.fpga.fft_overflow_cnt.read() {
+            FFT_OVFL_GAUGE.set(u32::from(v).try_into().unwrap());
+        } else {
+            warn!("Error reading from FPGA");
+        }
+        if let Ok(v) = device.fpga.clip_cnt.read() {
+            REQUANT_OVFL_GAUGE.set(u32::from(v).try_into().unwrap());
+        } else {
+            warn!("Error reading from FPGA");
+        }
+        if let Ok(v) = device.fpga.transport.lock().unwrap().temperature() {
+            FPGA_TEMP.set(v.try_into().unwrap());
+        } else {
+            warn!("Error reading from FPGA");
+        }
 
         // Update metrics
         PPS_GAUGE.set(pps.into());

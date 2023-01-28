@@ -100,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         };
     }
     let handles = thread_spawn! {
-        "monitor"    : monitor_task(&stat_rcv, &avg_stokes_rcv, &all_chans),
+        "monitor"    : monitor_task(&stat_rcv, &avg_stokes_rcv, &all_chans, &device),
         "dummy_exfil": dummy_consumer(&stokes_rcv, &avg_stokes_snd),
         "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
         "split"      : payload_split(&payload_rcv, &downsamp_snd, &dump_snd),

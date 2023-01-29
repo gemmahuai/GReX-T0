@@ -109,7 +109,7 @@ pub fn pcap_task(
         }
         if let Some(bytes) = cap.next_payload() {
             let pl = Payload::from_bytes(&bytes);
-            debug!("Incoming packet idx: {}", pl.count);
+            info!("Incoming packet idx: {}", pl.count);
             payload_sender.send(pl).unwrap();
             count += 1;
         }

@@ -1,4 +1,4 @@
 ## TODO
 - Exfil to psrdada or sigproc
-- Check packet number monotonicity
+- Packet reordering
 - Fix exfil timing using packet number

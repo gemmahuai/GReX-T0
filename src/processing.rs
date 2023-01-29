@@ -1,11 +1,15 @@
 //! Inter-thread processing (downsampling, voltage ring buffer, etc)
 
+use std::collections::HashMap;
+
 use crate::common::{Payload, Stokes, CHANNELS};
 use crossbeam::channel::{Receiver, Sender};
-use log::info;
+use log::{info, warn};
 
 // About 10s
 const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
+// How many packets out of order do we want to be able to deal with?
+const PACKET_REODER_BUF_SIZE: usize = 1024;
 
 #[allow(clippy::missing_panics_doc)]
 #[allow(clippy::cast_precision_loss)]
@@ -61,5 +65,92 @@ pub fn downsample_task(
         }
         // Increment the idx
         stokes_idx = (stokes_idx + 1) % downsample_factor as usize;
+    }
+}
+
+struct ReorderBuf {
+    buf: Vec<Payload>,
+    free_idxs: Vec<usize>,
+    queued: HashMap<u64, usize>,
+    next_needed: u64,
+}
+
+impl ReorderBuf {
+    fn new() -> Self {
+        Self {
+            buf: vec![Payload::default(); PACKET_REODER_BUF_SIZE],
+            free_idxs: (0..PACKET_REODER_BUF_SIZE).into_iter().collect(),
+            queued: HashMap::new(),
+            next_needed: 0,
+        }
+    }
+    // Attempts to add a payload to the buffer, returning None if the buffer is full
+    fn push(&mut self, payload: Payload) -> Option<()> {
+        // Get the next free index
+        let next_idx = self.free_idxs.pop()?;
+        // Associate its timestamp
+        self.queued.insert(payload.count, next_idx);
+        // Insert into the buffer
+        self.buf[next_idx] = payload;
+        Some(())
+    }
+
+    // Set the next payload needed for the iterator to work
+    fn set_needed(&mut self, next_needed: u64) {
+        self.next_needed = next_needed;
+    }
+
+    // Get the state of the next needed (after iteration has moved it)
+    fn get_needed(&self) -> u64 {
+        self.next_needed
+    }
+}
+
+impl Iterator for ReorderBuf {
+    type Item = Payload;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Grab the index of the next needed (if it exists)
+        let idx = self.queued.remove(&self.next_needed)?;
+        // Recycle this index
+        self.free_idxs.push(idx);
+        // Increment next needed
+        self.next_needed += 1;
+        // Return the payload
+        Some(self.buf[idx].clone())
+    }
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payload>) -> ! {
+    let mut rb = ReorderBuf::new();
+    let mut first_payload = true;
+    loop {
+        // Grab the next payload
+        let payload = payload_recv.recv().unwrap();
+        // If this is the next payload we expect (or it's the first one), send it right away
+        // which avoids a copy in the not-out-of-order case
+        if first_payload || payload.count == rb.get_needed() {
+            rb.set_needed(payload.count + 1);
+            payload_send.send(payload).unwrap();
+            if first_payload {
+                first_payload = false;
+            }
+        } else {
+            // Insert in our buffer
+            // If we run out of free slots (maybe the packet is totally gone (got corrupted or something)), we need to just increment
+            // the next_needed, drain, and log the fact that there's a missing packet
+            match rb.push(payload) {
+                Some(_) => (),
+                None => {
+                    warn!("Reorder buffer filled up while waiting for next payyload");
+                    rb.set_needed(rb.get_needed() + 1);
+                }
+            }
+        }
+        // Drain
+        for pl in rb.by_ref() {
+            payload_send.send(pl).unwrap();
+        }
     }
 }

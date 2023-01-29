@@ -1,4 +1,3 @@
 ## TODO
 - Exfil to psrdada or sigproc
-- TUI
-- Prometheus logs
+- Check packet number monotonicity

@@ -4,7 +4,7 @@
 pub use clap::Parser;
 pub use crossbeam::channel::bounded;
 use grex_t0::{
-    args::{self, parse_core_range},
+    args,
     capture::{pcap_task, Capture},
     common::{payload_split, AllChans},
     dumps::{dump_task, trigger_task, DumpRing},
@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = args::Cli::parse();
 
     // Get the CPU core range
-    let mut cpus = parse_core_range(&cli.core_range);
+    let mut cpus = cli.core_range;
 
     // Set this thread to the first core on the NUMA node so our memory is in the right place
     let mut cpu_set = CpuSet::new();

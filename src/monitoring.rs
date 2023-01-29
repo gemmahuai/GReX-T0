@@ -40,7 +40,7 @@ lazy_static! {
         "raw_adc_hist",
         "Histogram data for raw ADC counts",
         &["polarization"],
-        linear_buckets(-127.0, 1.0, 256).unwrap()
+        linear_buckets(-127.0, 4.0, 256).unwrap()
     )
     .unwrap();
 }

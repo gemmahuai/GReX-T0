@@ -156,13 +156,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         });
     }
+    // And clean up the psrdada buffer, if we created it
+    if let Some(buf) = dada_buf {
+        info!("Cleaning up PSRDADA buffers");
+        drop(buf);
+    }
     // Join them all when we kill the task
     for handle in handles {
         handle.join().unwrap();
-    }
-    // And clean up the psrdada buffer, if we created it
-    if let Some(buf) = dada_buf {
-        drop(buf);
     }
     Ok(())
 }

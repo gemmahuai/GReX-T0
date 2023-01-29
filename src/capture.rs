@@ -2,7 +2,7 @@
 
 use crate::common::{Channel, Payload};
 use crossbeam::channel::Sender;
-use log::{info, warn};
+use log::{debug, info, warn};
 use pcap::Stat;
 use std::time::{Duration, Instant};
 
@@ -97,7 +97,6 @@ pub fn pcap_task(
     info!("Starting capture task!");
     let mut count = 0;
     let mut last_time = Instant::now();
-    let mut last_idx = 0u64;
     loop {
         if count == STAT_PACKET_INTERVAL {
             count = 0;
@@ -110,10 +109,7 @@ pub fn pcap_task(
         }
         if let Some(bytes) = cap.next_payload() {
             let pl = Payload::from_bytes(&bytes);
-            if pl.count != last_idx + 1 {
-                warn!("Payloads out of order");
-            }
-            last_idx = pl.count;
+            debug!("Incoming packet idx: {}", pl.count);
             payload_sender.send(pl).unwrap();
             count += 1;
         }

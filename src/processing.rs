@@ -143,7 +143,7 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
             match rb.push(payload) {
                 Some(_) => (),
                 None => {
-                    warn!("Reorder buffer filled up while waiting for next payyload");
+                    warn!("Reorder buffer filled up while waiting for next payload");
                     rb.set_needed(rb.get_needed() + 1);
                 }
             }

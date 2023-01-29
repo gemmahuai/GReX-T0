@@ -1,43 +1,15 @@
 use crate::common::{Stokes, CHANNELS, PACKET_CADENCE};
 use byte_slice_cast::AsByteSlice;
 use chrono::{DateTime, Datelike, Timelike, Utc};
-use crossbeam::channel::{Receiver, Sender};
+use crossbeam::channel::Receiver;
 use lending_iterator::lending_iterator::LendingIterator;
 use log::{debug, info};
 use psrdada::client::DadaClient;
 use std::{collections::HashMap, io::Write};
 
-// FIXME (10s)
-const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
 // Set by hardware (in MHz)
-const LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
+const _LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
 const BANDWIDTH: f64 = 250.0;
-
-#[allow(clippy::missing_panics_doc)]
-#[allow(clippy::cast_precision_loss)]
-pub fn dummy_consumer(receiver: &Receiver<Stokes>, avg_snd: &Sender<[f64; CHANNELS]>) {
-    let mut avg = [0f64; CHANNELS];
-    let mut idx = 0usize;
-    loop {
-        let stokes = receiver.recv().unwrap();
-        // Copy stokes into average buf
-        avg.iter_mut()
-            .zip(stokes)
-            .for_each(|(x, y)| *x += f64::from(y));
-        // If we're at the end, we're done
-        if idx == MONITOR_SPEC_DOWNSAMPLE_FACTOR - 1 {
-            // Find the average into an f32 (which is lossless)
-            avg.iter_mut()
-                .for_each(|v| *v /= MONITOR_SPEC_DOWNSAMPLE_FACTOR as f64);
-            // Don't block here
-            let _ = avg_snd.try_send(avg);
-            // And zero the averaging buf
-            avg = [0f64; CHANNELS];
-        }
-        // Increment the idx
-        idx = (idx + 1) % MONITOR_SPEC_DOWNSAMPLE_FACTOR;
-    }
-}
 
 /// Convert a chronno `DateTime` into a heimdall-compatible timestamp string
 fn heimdall_timestamp(time: &DateTime<Utc>) -> String {
@@ -50,6 +22,14 @@ fn heimdall_timestamp(time: &DateTime<Utc>) -> String {
         time.minute(),
         time.second()
     )
+}
+
+/// Do nothing
+#[allow(clippy::missing_panics_doc)]
+pub fn dummy_consumer(stokes_rcv: &Receiver<Stokes>) {
+    loop {
+        stokes_rcv.recv().unwrap();
+    }
 }
 
 #[allow(clippy::missing_panics_doc)]

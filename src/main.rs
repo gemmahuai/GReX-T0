@@ -25,6 +25,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use tokio::net::TcpListener;
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Get the CLI options
     let cli = args::Cli::parse();
@@ -118,12 +119,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     let handles = thread_spawn! {
         "monitor"    : monitor_task(&stat_rcv, &avg_stokes_rcv, &all_chans, &device),
-        "dummy_exfil": if let Some(Exfil::Psrdada { samples, key }) = cli.exfil {
-                            dada_consumer(key, &stokes_rcv, &packet_start, samples);
-                       } else {
-                            dummy_consumer(&stokes_rcv, &avg_stokes_snd);
-                       },
-        "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
+        "dummy_exfil":     match cli.exfil {
+            Some(ex) => match ex {
+                Exfil::Psrdada { key, samples } => {
+                    dada_consumer(key, &stokes_rcv, &packet_start, samples);
+                }
+                Exfil::Filterbank => dummy_consumer(&stokes_rcv),
+            },
+            None => dummy_consumer(&stokes_rcv),
+        },
+        "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, &avg_stokes_snd, cli.downsample),
         "split"      : payload_split(&payload_rcv, &downsamp_snd, &dump_snd),
         "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv, &packet_start),
         "dump_trig"  : trigger_task(&signal_snd, &socket),

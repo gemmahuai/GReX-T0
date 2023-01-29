@@ -36,6 +36,9 @@ pub struct Cli {
     /// Force a pps trigger
     #[arg(long)]
     pub trig: bool,
+    /// Requantization gain
+    #[arg(long)]
+    pub requant_gain: u32,
 }
 
 #[allow(clippy::missing_panics_doc)]

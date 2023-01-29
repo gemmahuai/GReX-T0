@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let time_sync = client.synchronize(cli.ntp_addr).unwrap();
 
     // Setup the FPGA
-    let mut device = Device::new(cli.fpga_addr);
+    let mut device = Device::new(cli.fpga_addr, cli.requant_gain);
     let packet_start = device.trigger(&time_sync);
     if cli.trig {
         device.force_pps();

@@ -19,7 +19,7 @@ pub struct Device {
 impl Device {
     #[allow(clippy::missing_panics_doc)]
     #[must_use]
-    pub fn new(addr: SocketAddr) -> Self {
+    pub fn new(addr: SocketAddr, requant_gain: u32) -> Self {
         let fpga = GrexFpga::new(Tapcp::connect(addr, Platform::SNAP).expect("Connection failed"))
             .expect("Failed to build FPGA object");
         assert!(
@@ -27,7 +27,9 @@ impl Device {
             "SNAP board is not programmed/running"
         );
         // Setup gain and requant factors
-        fpga.requant_gain.write(&U32F0::from_num(10)).unwrap();
+        fpga.requant_gain
+            .write(&U32F0::from_num(requant_gain))
+            .unwrap();
         fpga.fft_shift.write(&U32F0::from_num(4095)).unwrap();
         Self { fpga }
     }

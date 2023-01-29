@@ -41,7 +41,7 @@ pub struct Cli {
     /// Requantization gain
     #[arg(long)]
     pub requant_gain: u32,
-    /// Exfil method
+    /// Exfil method - leaving this unspecified will not save stokes data
     #[command(subcommand)]
     pub exfil: Option<Exfil>,
 }
@@ -57,6 +57,7 @@ pub enum Exfil {
         #[clap(short, long, default_value_t = 65536)]
         samples: usize,
     },
+    Filterbank,
 }
 
 #[allow(clippy::missing_panics_doc)]

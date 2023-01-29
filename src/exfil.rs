@@ -73,9 +73,8 @@ pub fn dada_consumer(
         ("OBS_OFFSET".to_owned(), 0.to_string()),
         ("TSAMP".to_owned(), (PACKET_CADENCE * 1e6).to_string()),
     ]);
-    // Connect to the PSRDADA buffer on this thread
-    let mut client = DadaClient::new(key).expect("Could not connect to PSRDADA buffer");
     // Grab PSRDADA writing context
+    let mut client = DadaClient::new(key).expect("Could not connect to PSRDADA buffer");
     let (mut hc, mut dc) = client.split();
     let mut data_writer = dc.writer();
     info!("DADA header pushed, starting exfil to Heimdall");

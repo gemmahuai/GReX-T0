@@ -4,11 +4,11 @@
 pub use clap::Parser;
 pub use crossbeam::channel::bounded;
 use grex_t0::{
-    args,
+    args::{self, Exfil},
     capture::{pcap_task, Capture},
-    common::{payload_split, AllChans},
+    common::{payload_split, AllChans, CHANNELS},
     dumps::{dump_task, trigger_task, DumpRing},
-    exfil::dummy_consumer,
+    exfil::{dada_consumer, dummy_consumer},
     fpga::Device,
     monitoring::{metrics, monitor_task},
     processing::downsample_task,
@@ -19,6 +19,7 @@ use nix::{
     sched::{sched_setaffinity, CpuSet},
     unistd::Pid,
 };
+use psrdada::builder::DadaClientBuilder;
 use rsntp::SntpClient;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use tokio::net::TcpListener;
@@ -50,6 +51,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let packet_start = device.trigger(&time_sync);
     if cli.trig {
         device.force_pps();
+    }
+
+    // If we're using PSRDADA, create the buffer,
+    // which will be cleaned up on program exit
+    let mut dada_buf = None;
+    if let Some(Exfil::Psrdada { key, samples }) = cli.exfil {
+        info!("Creating PSRDADA buffer");
+        // We're sending float32s, so we know how big each window is
+        dada_buf = Some(
+            DadaClientBuilder::new(key)
+                .buf_size((samples * CHANNELS * 4).try_into().unwrap())
+                .lock(true)
+                .page(true)
+                .build()
+                .unwrap(),
+        );
     }
 
     // Create the capture
@@ -101,7 +118,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     let handles = thread_spawn! {
         "monitor"    : monitor_task(&stat_rcv, &avg_stokes_rcv, &all_chans, &device),
-        "dummy_exfil": dummy_consumer(&stokes_rcv, &avg_stokes_snd),
+        "dummy_exfil": if let Some(Exfil::Psrdada { samples, key }) = cli.exfil {
+                            dada_consumer(key, &stokes_rcv, &packet_start, samples);
+                       } else {
+                            dummy_consumer(&stokes_rcv, &avg_stokes_snd);
+                       },
         "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, cli.downsample),
         "split"      : payload_split(&payload_rcv, &downsamp_snd, &dump_snd),
         "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv, &packet_start),
@@ -133,6 +154,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Join them all when we kill the task
     for handle in handles {
         handle.join().unwrap();
+    }
+    // And clean up the psrdada buffer, if we created it
+    if let Some(buf) = dada_buf {
+        drop(buf);
     }
     Ok(())
 }

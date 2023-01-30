@@ -9,7 +9,7 @@ use log::{info, warn};
 // About 10s
 const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
 // How many packets out of order do we want to be able to deal with?
-const PACKET_REODER_BUF_SIZE: usize = 32_768;
+const PACKET_REODER_BUF_SIZE: usize = 1_048_576;
 
 #[allow(clippy::missing_panics_doc)]
 #[allow(clippy::cast_precision_loss)]

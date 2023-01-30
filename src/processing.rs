@@ -131,6 +131,7 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
         // If this is the next payload we expect (or it's the first one), send it right away
         // which avoids a copy in the not-out-of-order case
         if first_payload || payload.count == rb.get_needed() {
+            info!("Bypass");
             rb.set_needed(payload.count + 1);
             payload_send.send(payload).unwrap();
             if first_payload {

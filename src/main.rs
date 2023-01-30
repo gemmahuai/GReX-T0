@@ -23,7 +23,7 @@ use rsntp::SntpClient;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use tokio::net::TcpListener;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 #[allow(clippy::too_many_lines)]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Get the CLI options

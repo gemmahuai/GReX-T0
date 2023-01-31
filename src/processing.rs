@@ -84,7 +84,8 @@ impl ReorderBuf {
             next_needed: 0,
         }
     }
-    // Attempts to add a payload to the buffer, returning None if the buffer is full
+
+    /// Attempts to add a payload to the buffer, returning None if the buffer is full
     fn push(&mut self, payload: &Payload) -> Option<()> {
         // Get the next free index
         let next_idx = self.free_idxs.pop()?;
@@ -95,17 +96,17 @@ impl ReorderBuf {
         Some(())
     }
 
-    // Set the next payload needed for the iterator to work
+    /// Set the next payload needed for the iterator to work
     fn set_needed(&mut self, next_needed: u64) {
         self.next_needed = next_needed;
     }
 
-    // Get the state of the next needed (after iteration has moved it)
+    /// Get the state of the next needed (after iteration has moved it)
     fn get_needed(&self) -> u64 {
         self.next_needed
     }
 
-    // Clear the state of the whole thing (without actually overwriting memory)
+    /// Clear the state of the whole thing (without actually overwriting memory)
     fn reset(&mut self) {
         self.queued.clear();
         self.free_idxs = (0..PACKET_REODER_BUF_SIZE).collect();
@@ -132,7 +133,7 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn foo() {
+    fn test_reorder() {
         let mut rb = ReorderBuf::new();
         for i in (0..=127).rev() {
             rb.push(&Payload {

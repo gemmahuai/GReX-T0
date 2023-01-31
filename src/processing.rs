@@ -165,12 +165,11 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
         } else {
             // Insert in our buffer
             // If we run out of free slots (maybe the packet is totally gone (got corrupted or something)) we need to:
-            // - Reset the whole thing
             // - Set the next needed to *this* payload's count + 1
             // - Send off this packet that we couldn't push
             if rb.push(&payload).is_none() {
                 warn!("Reorder buffer filled up while waiting for next payload");
-                rb.reset();
+                // rb.reset();
                 rb.set_needed(payload.count + 1);
                 payload_send.send(payload).unwrap();
             }

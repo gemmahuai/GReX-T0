@@ -104,7 +104,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // FIXME
-    let foob = std::thread::spawn(move || reorder_task(&payload_rcv, &reorder_snd));
+    let reorder_task = std::thread::Builder::new()
+        .name("reorder".to_string())
+        .spawn(move || {
+            let mut cpu_set = CpuSet::new();
+            cpu_set.set(8).unwrap();
+            sched_setaffinity(Pid::from_raw(0), &cpu_set).unwrap();
+            reorder_task(&payload_rcv, &reorder_snd);
+        })
+        .unwrap();
 
     let handles = thread_spawn! {
         "monitor"    : monitor_task(&stat_rcv, &avg_stokes_rcv, &all_chans, &device),
@@ -150,6 +158,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         handle.join().unwrap();
     }
     // FIXME
-    foob.join().unwrap();
+    reorder_task.join().unwrap();
     Ok(())
 }

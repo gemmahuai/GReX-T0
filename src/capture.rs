@@ -63,8 +63,6 @@ impl Capture {
             .buffer_size(33_554_432) // Up to 20ms
             .open()
             .expect("Failed to open the capture");
-        //.setnonblock()
-        //.expect("Setting non-blocking mode failed");
         // Add the port filter
         cap.filter(&format!("dst port {port}"), true)
             .expect("Error creating port filter");

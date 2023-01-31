@@ -87,23 +87,12 @@ impl ReorderBuf {
     /// Attempts to add a payload to the buffer, returning None if the buffer is full
     fn push(&mut self, payload: &Payload) -> Option<()> {
         // Get the next free index
-        let (ret, next_idx) = match self.free_idxs.pop() {
-            Some(idx) => (Some(()), idx),
-            None => {
-                // Get rid of the oldest
-                // This needs rust 1.66
-                // let (_count, idx) = self.queued.pop_first().unwrap();
-                let oldest = *self.queued.keys().next().unwrap();
-                let idx = self.queued.remove(&oldest).unwrap();
-                // And use this new index
-                (None, idx)
-            }
-        };
+        let next_idx = self.free_idxs.pop()?;
         // Associate its timestamp
         self.queued.insert(payload.count, next_idx);
         // Insert into the buffer
         self.buf[next_idx] = *payload;
-        ret
+        Some(())
     }
 
     /// Set the next payload needed for the iterator to work
@@ -116,10 +105,17 @@ impl ReorderBuf {
         self.next_needed
     }
 
-    /// Clear the state of the whole thing (without actually overwriting memory)
+    /// Clear all the packets older than the current `next_needed`
     fn reset(&mut self) {
-        self.queued.clear();
-        self.free_idxs = (0..PACKET_REODER_BUF_SIZE).collect();
+        loop {
+            // These are sorted because BTreeMap
+            let k = *self.queued.keys().next().unwrap();
+            if k >= self.next_needed {
+                break;
+            }
+            let v = self.queued.remove(&k).unwrap();
+            self.free_idxs.push(v);
+        }
     }
 }
 
@@ -185,8 +181,9 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
                     "Reorder buffer filled up while waiting for next payload. Oldest {} - Newest {} - Needed {}",
                     oldest, newest, rb.get_needed()
                 );
-                //rb.reset();
                 rb.set_needed(payload.count + 1);
+                rb.reset();
+                payload_send.send(payload).unwrap();
             }
         }
         // Drain

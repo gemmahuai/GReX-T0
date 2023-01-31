@@ -169,7 +169,12 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
             // - Set the next needed to *this* payload's count + 1
             // - Send off this packet that we couldn't push
             if rb.push(&payload).is_none() {
-                warn!("Reorder buffer filled up while waiting for next payload");
+                let oldest = rb.queued.keys().min().unwrap();
+                let newest = rb.queued.keys().max().unwrap();
+                warn!(
+                    "Reorder buffer filled up while waiting for next payload. Oldest {} - Newest {}",
+                    oldest, newest
+                );
                 rb.reset();
                 rb.set_needed(payload.count + 1);
                 payload_send.send(payload).unwrap();

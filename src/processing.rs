@@ -182,6 +182,7 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
         }
         // Drain
         for pl in rb.by_ref() {
+            info!("Draining!");
             payload_send.send(pl).unwrap();
         }
     }

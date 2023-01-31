@@ -91,7 +91,10 @@ impl ReorderBuf {
             Some(idx) => (Some(()), idx),
             None => {
                 // Get rid of the oldest
-                let (_count, idx) = self.queued.pop_first().unwrap();
+                // This needs rust 1.66
+                // let (_count, idx) = self.queued.pop_first().unwrap();
+                let oldest = *self.queued.keys().next().unwrap();
+                let idx = self.queued.remove(&oldest).unwrap();
                 // And use this new index
                 (None, idx)
             }

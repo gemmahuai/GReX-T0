@@ -107,9 +107,9 @@ impl ReorderBuf {
 
     /// Clear all the packets older than the current `next_needed`
     fn reset(&mut self) {
-        loop {
-            // These are sorted because BTreeMap
-            let k = *self.queued.keys().next().unwrap();
+        // These are sorted because BTreeMap
+        while let Some(kref) = self.queued.keys().next() {
+            let k = *kref;
             if k >= self.next_needed {
                 break;
             }

@@ -1,10 +1,9 @@
 //! Inter-thread processing (downsampling, voltage ring buffer, etc)
 
-use std::collections::HashMap;
-
 use crate::common::{Payload, Stokes, CHANNELS};
 use crossbeam::channel::{Receiver, Sender};
 use log::{info, warn};
+use std::collections::BTreeMap;
 
 // About 10s
 const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
@@ -71,7 +70,7 @@ pub fn downsample_task(
 struct ReorderBuf {
     buf: Vec<Payload>,
     free_idxs: Vec<usize>,
-    queued: HashMap<u64, usize>,
+    queued: BTreeMap<u64, usize>,
     next_needed: u64,
 }
 
@@ -80,7 +79,7 @@ impl ReorderBuf {
         Self {
             buf: vec![Payload::default(); PACKET_REODER_BUF_SIZE],
             free_idxs: (0..PACKET_REODER_BUF_SIZE).collect(),
-            queued: HashMap::new(),
+            queued: BTreeMap::new(),
             next_needed: 0,
         }
     }
@@ -88,12 +87,20 @@ impl ReorderBuf {
     /// Attempts to add a payload to the buffer, returning None if the buffer is full
     fn push(&mut self, payload: &Payload) -> Option<()> {
         // Get the next free index
-        let next_idx = self.free_idxs.pop()?;
+        let (ret, next_idx) = match self.free_idxs.pop() {
+            Some(idx) => (Some(()), idx),
+            None => {
+                // Get rid of the oldest
+                let (_count, idx) = self.queued.pop_first().unwrap();
+                // And use this new index
+                (None, idx)
+            }
+        };
         // Associate its timestamp
         self.queued.insert(payload.count, next_idx);
         // Insert into the buffer
         self.buf[next_idx] = *payload;
-        Some(())
+        ret
     }
 
     /// Set the next payload needed for the iterator to work
@@ -169,15 +176,14 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
             // - Set the next needed to *this* payload's count + 1
             // - Send off this packet that we couldn't push
             if rb.push(&payload).is_none() {
-                let oldest = rb.queued.keys().min().unwrap();
-                let newest = rb.queued.keys().max().unwrap();
+                let oldest = rb.queued.keys().next().unwrap();
+                let newest = rb.queued.keys().last().unwrap();
                 warn!(
                     "Reorder buffer filled up while waiting for next payload. Oldest {} - Newest {} - Needed {}",
                     oldest, newest, rb.get_needed()
                 );
-                rb.reset();
+                //rb.reset();
                 rb.set_needed(payload.count + 1);
-                payload_send.send(payload).unwrap();
             }
         }
         // Drain

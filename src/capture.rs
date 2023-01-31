@@ -19,6 +19,8 @@ pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 /// How many packets before we send statistics information to another thread
 /// This should be around ~4s
 const STAT_PACKET_INTERVAL: usize = 500_000;
+/// How many packets should we throw out in the beginning to make sure we've more or less cleared weird startup effects
+const WARMUP_PACKETS: usize = 1_000_000;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
@@ -93,11 +95,13 @@ pub fn pcap_task(
     stat_sender: &Sender<(Stat, Duration)>,
 ) -> ! {
     info!("Starting capture task!");
-    let mut count = 0;
+    let mut monitor_count = 0;
     let mut last_time = Instant::now();
+    let mut warmup_count = 0usize;
+    let mut warmed_up = false;
     loop {
-        if count == STAT_PACKET_INTERVAL {
-            count = 0;
+        if monitor_count == STAT_PACKET_INTERVAL {
+            monitor_count = 0;
             // We don't care about dropping stats, we *do* care about dropping packets
             let _ = stat_sender.try_send((
                 cap.0.stats().expect("Failed to get capture statistics"),
@@ -106,9 +110,16 @@ pub fn pcap_task(
             last_time = Instant::now();
         }
         if let Some(bytes) = cap.next_payload() {
-            let pl = Payload::from_bytes(&bytes);
-            payload_sender.send(pl).unwrap();
-            count += 1;
+            if warmed_up {
+                monitor_count += 1;
+                let pl = Payload::from_bytes(&bytes);
+                payload_sender.send(pl).unwrap();
+            } else {
+                warmup_count += 1;
+                if warmup_count == WARMUP_PACKETS {
+                    warmed_up = true;
+                }
+            }
         }
     }
 }

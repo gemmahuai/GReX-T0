@@ -9,7 +9,7 @@ use log::{info, warn};
 // About 10s
 const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
 // How many packets out of order do we want to be able to deal with? Vikram says 1000 is fine.
-const PACKET_REODER_BUF_SIZE: usize = 16_384;
+const PACKET_REODER_BUF_SIZE: usize = 262_144;
 
 #[allow(clippy::missing_panics_doc)]
 #[allow(clippy::cast_precision_loss)]
@@ -172,8 +172,8 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
                 let oldest = rb.queued.keys().min().unwrap();
                 let newest = rb.queued.keys().max().unwrap();
                 warn!(
-                    "Reorder buffer filled up while waiting for next payload. Oldest {} - Newest {}",
-                    oldest, newest
+                    "Reorder buffer filled up while waiting for next payload. Oldest {} - Newest {} - Needed {}",
+                    oldest, newest, rb.get_needed()
                 );
                 rb.reset();
                 rb.set_needed(payload.count + 1);

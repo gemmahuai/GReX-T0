@@ -5,6 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Remote attach",
+            "type": "lldb",
+            "request": "custom",
+            "sourceLanguages": [
+                "rust"
+            ],
+            "processCreateCommands": [
+                "gdb-remote 999",
+                "attach 1196"
+            ],
+        },
+        {
             "type": "lldb",
             "request": "launch",
             "name": "Debug executable 'grex-t0'",

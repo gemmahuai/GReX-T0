@@ -8,8 +8,8 @@ use log::{info, warn};
 
 // About 10s
 const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
-// How many packets out of order do we want to be able to deal with?
-const PACKET_REODER_BUF_SIZE: usize = 1_048_576;
+// How many packets out of order do we want to be able to deal with? Vikram says 1000 is fine.
+const PACKET_REODER_BUF_SIZE: usize = 1024;
 
 #[allow(clippy::missing_panics_doc)]
 #[allow(clippy::cast_precision_loss)]
@@ -79,19 +79,19 @@ impl ReorderBuf {
     fn new() -> Self {
         Self {
             buf: vec![Payload::default(); PACKET_REODER_BUF_SIZE],
-            free_idxs: (0..PACKET_REODER_BUF_SIZE).into_iter().collect(),
+            free_idxs: (0..PACKET_REODER_BUF_SIZE).collect(),
             queued: HashMap::new(),
             next_needed: 0,
         }
     }
     // Attempts to add a payload to the buffer, returning None if the buffer is full
-    fn push(&mut self, payload: Payload) -> Option<()> {
+    fn push(&mut self, payload: &Payload) -> Option<()> {
         // Get the next free index
         let next_idx = self.free_idxs.pop()?;
         // Associate its timestamp
         self.queued.insert(payload.count, next_idx);
         // Insert into the buffer
-        self.buf[next_idx] = payload;
+        self.buf[next_idx] = *payload;
         Some(())
     }
 
@@ -112,12 +112,31 @@ impl Iterator for ReorderBuf {
     fn next(&mut self) -> Option<Self::Item> {
         // Grab the index of the next needed (if it exists)
         let idx = self.queued.remove(&self.next_needed)?;
-        // Recycle this index
+        // Recycle this index (mark it as free)
         self.free_idxs.push(idx);
         // Increment next needed
         self.next_needed += 1;
         // Return the payload
-        Some(self.buf[idx].clone())
+        Some(self.buf[idx])
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn foo() {
+        let mut rb = ReorderBuf::new();
+        for i in (0..=127).rev() {
+            rb.push(&Payload {
+                count: i,
+                ..Default::default()
+            });
+        }
+        for (i, payload) in rb.by_ref().enumerate() {
+            assert_eq!(payload.count, i as u64);
+        }
     }
 }
 
@@ -131,7 +150,6 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
         // If this is the next payload we expect (or it's the first one), send it right away
         // which avoids a copy in the not-out-of-order case
         if first_payload || payload.count == rb.get_needed() {
-            info!("Bypass");
             rb.set_needed(payload.count + 1);
             payload_send.send(payload).unwrap();
             if first_payload {
@@ -141,12 +159,9 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
             // Insert in our buffer
             // If we run out of free slots (maybe the packet is totally gone (got corrupted or something)), we need to just increment
             // the next_needed, drain, and log the fact that there's a missing packet
-            match rb.push(payload) {
-                Some(_) => (),
-                None => {
-                    warn!("Reorder buffer filled up while waiting for next payload");
-                    rb.set_needed(rb.get_needed() + 1);
-                }
+            if rb.push(&payload).is_none() {
+                warn!("Reorder buffer filled up while waiting for next payload");
+                rb.set_needed(rb.get_needed() + 1);
             }
         }
         // Drain

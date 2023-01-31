@@ -48,7 +48,7 @@ pub fn stokes_i(a: &Channels, b: &Channels) -> Stokes {
     stokes
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Payload {
     /// Number of packets since the first packet
     pub count: u64,
@@ -142,7 +142,7 @@ pub fn payload_split(
     loop {
         let x = rcv.recv().unwrap();
         // This should block if we get held up
-        to_downsample.send(x.clone()).unwrap();
+        to_downsample.send(x).unwrap();
         // This one won't cause backpressure because that only will happen when we're doing IO
         let _ = to_dumps.try_send(x);
     }

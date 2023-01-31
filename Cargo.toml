@@ -47,7 +47,7 @@ harness = false
 
 [profile.release]
 debug = 1
-lto = "fat"
+lto = "thin"
 panic = "abort"
 
 [dev-dependencies]

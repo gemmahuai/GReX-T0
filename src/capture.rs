@@ -2,7 +2,7 @@
 
 use crate::common::{Channel, Payload};
 use crossbeam::channel::Sender;
-use log::{debug, info, warn};
+use log::info;
 use pcap::Stat;
 use std::time::{Duration, Instant};
 

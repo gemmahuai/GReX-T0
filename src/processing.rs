@@ -153,7 +153,6 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
     loop {
         // Grab the next payload
         let payload = payload_recv.recv().unwrap();
-        println!("Expected {} - Received {}", rb.get_needed(), payload.count);
         // If this is the next payload we expect (or it's the first one), send it right away
         // which avoids a copy in the not-out-of-order case
         if first_payload || payload.count == rb.get_needed() {

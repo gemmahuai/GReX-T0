@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 // About 10s
 const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
 // How many packets out of order do we want to be able to deal with? Vikram says 1000 is fine.
-const PACKET_REODER_BUF_SIZE: usize = 1024;
+const PACKET_REODER_BUF_SIZE: usize = 16384;
 // How long before we give up waiting - based on measuring, this is a decent upper bound as most are <50
 const PACKET_COUT_TIMEUOT: usize = 100;
 
@@ -157,7 +157,6 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
         }
         if waiting == PACKET_COUT_TIMEUOT {
             // Generate a fake, invalid packet to take its place
-            info!("Packet timeout");
             rb.next_needed += 1;
             payload_send.send(Payload::default()).unwrap();
             waiting = 0;

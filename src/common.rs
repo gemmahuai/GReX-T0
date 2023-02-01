@@ -54,6 +54,7 @@ pub struct Payload {
     pub count: u64,
     pub pol_a: [Channel; CHANNELS],
     pub pol_b: [Channel; CHANNELS],
+    pub valid: bool,
 }
 
 #[derive(Debug)]
@@ -70,6 +71,7 @@ impl Default for Payload {
             count: Default::default(),
             pol_a: [Channel::default(); CHANNELS],
             pol_b: [Channel::default(); CHANNELS],
+            valid: false,
         }
     }
 }

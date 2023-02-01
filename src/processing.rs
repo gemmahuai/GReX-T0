@@ -8,7 +8,9 @@ use std::collections::BTreeMap;
 // About 10s
 const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
 // How many packets out of order do we want to be able to deal with? Vikram says 1000 is fine.
-const PACKET_REODER_BUF_SIZE: usize = 262_144;
+const PACKET_REODER_BUF_SIZE: usize = 1024;
+// How long before we give up waiting - based on measuring, this is a decent upper bound as most are <50
+const PACKET_COUT_TIMEUOT: usize = 100;
 
 #[allow(clippy::missing_panics_doc)]
 #[allow(clippy::cast_precision_loss)]
@@ -27,11 +29,13 @@ pub fn downsample_task(
     let mut monitor_idx = 0usize;
     loop {
         let payload = payload_recv.recv().unwrap();
-        // Calculate stokes into the averaging buf
-        stokes_avg
-            .iter_mut()
-            .zip(payload.stokes_i())
-            .for_each(|(x, y)| *x += y);
+        // Calculate stokes into the averaging buf (if it's valid)
+        if payload.valid {
+            stokes_avg
+                .iter_mut()
+                .zip(payload.stokes_i())
+                .for_each(|(x, y)| *x += y);
+        }
         // If we're at the end, we're done with this average
         if stokes_idx == downsample_factor as usize - 1 {
             // Find the average into an f32 (which is lossless)
@@ -91,31 +95,15 @@ impl ReorderBuf {
         // Associate its timestamp
         self.queued.insert(payload.count, next_idx);
         // Insert into the buffer
-        self.buf[next_idx] = *payload;
+        // Safety: These indices are correct by construction
+        *unsafe { self.buf.get_unchecked_mut(next_idx) } = *payload;
         Some(())
     }
 
-    /// Set the next payload needed for the iterator to work
-    fn set_needed(&mut self, next_needed: u64) {
-        self.next_needed = next_needed;
-    }
-
-    /// Get the state of the next needed (after iteration has moved it)
-    fn get_needed(&self) -> u64 {
-        self.next_needed
-    }
-
-    /// Clear all the packets older than the current `next_needed`
+    /// Clear all the packets (without clearing memory)
     fn reset(&mut self) {
-        // These are sorted because BTreeMap
-        while let Some(kref) = self.queued.keys().next() {
-            let k = *kref;
-            if k >= self.next_needed {
-                break;
-            }
-            let v = self.queued.remove(&k).unwrap();
-            self.free_idxs.push(v);
-        }
+        self.queued.clear();
+        self.free_idxs = (0..PACKET_REODER_BUF_SIZE).collect();
     }
 }
 
@@ -130,7 +118,8 @@ impl Iterator for ReorderBuf {
         // Increment next needed
         self.next_needed += 1;
         // Return the payload
-        Some(self.buf[idx])
+        // Safety: These indices are correct by construction
+        Some(unsafe { *self.buf.get_unchecked(idx) })
     }
 }
 
@@ -157,13 +146,27 @@ pub mod tests {
 pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payload>) -> ! {
     let mut rb = ReorderBuf::new();
     let mut first_payload = true;
+    let mut waiting = 0usize;
+    let mut last_waiting_count = 0u64;
     loop {
+        if last_waiting_count == rb.next_needed {
+            waiting += 1;
+        } else {
+            last_waiting_count = rb.next_needed;
+            waiting = 0;
+        }
+        if waiting == PACKET_COUT_TIMEUOT {
+            // Generate a fake, invalid packet to take its place
+            rb.next_needed += 1;
+            payload_send.send(Payload::default()).unwrap();
+            waiting = 0;
+        }
         // Grab the next payload
         let payload = payload_recv.recv().unwrap();
         // If this is the next payload we expect (or it's the first one), send it right away
         // which avoids a copy in the not-out-of-order case
-        if first_payload || payload.count == rb.get_needed() {
-            rb.set_needed(payload.count + 1);
+        if first_payload || payload.count == rb.next_needed {
+            rb.next_needed = payload.count + 1;
             payload_send.send(payload).unwrap();
             if first_payload {
                 first_payload = false;
@@ -175,19 +178,15 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
             // - Set the next needed to *this* payload's count + 1
             // - Send off this packet that we couldn't push
             if rb.push(&payload).is_none() {
-                let oldest = rb.queued.keys().next().unwrap();
-                let newest = rb.queued.keys().last().unwrap();
-                warn!(
-                    "Reorder buffer filled up while waiting for next payload. Oldest {} - Newest {} - Needed {}",
-                    oldest, newest, rb.get_needed()
-                );
-                rb.set_needed(payload.count + 1);
+                warn!("Reorder buffer filled up while waiting for next payload. This shouldn't happen.",);
+                rb.next_needed = payload.count + 1;
                 rb.reset();
                 payload_send.send(payload).unwrap();
             }
         }
         // Drain
         for pl in rb.by_ref() {
+            // FIXME
             info!("Draining!");
             payload_send.send(pl).unwrap();
         }

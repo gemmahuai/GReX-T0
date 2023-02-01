@@ -4,7 +4,6 @@ use crate::common::{Channel, Payload};
 use crossbeam::channel::Sender;
 use log::info;
 use pcap::Stat;
-use std::time::{Duration, Instant};
 
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
 const WORD_SIZE: usize = 8;
@@ -41,6 +40,8 @@ impl Payload {
                 .try_into()
                 .expect("This is exactly 8 bytes"),
         );
+        // This is real data, so it is valid
+        payload.valid = true;
         payload
     }
 }
@@ -90,20 +91,15 @@ pub type RawPacket = [u8; PAYLOAD_SIZE];
 pub fn pcap_task(
     mut cap: Capture,
     payload_sender: &Sender<Payload>,
-    stat_sender: &Sender<(Stat, Duration)>,
+    stat_sender: &Sender<Stat>,
 ) -> ! {
     info!("Starting capture task!");
     let mut monitor_count = 0;
-    let mut last_time = Instant::now();
     loop {
         if monitor_count == STAT_PACKET_INTERVAL {
             monitor_count = 0;
             // We don't care about dropping stats, we *do* care about dropping packets
-            let _ = stat_sender.try_send((
-                cap.0.stats().expect("Failed to get capture statistics"),
-                last_time.elapsed(),
-            ));
-            last_time = Instant::now();
+            let _ = stat_sender.try_send(cap.0.stats().expect("Failed to get capture statistics"));
         }
         if let Some(bytes) = cap.next_payload() {
             monitor_count += 1;

@@ -15,7 +15,6 @@ use prometheus::{
     TextEncoder,
 };
 use std::convert::Infallible;
-use std::time::Duration;
 
 lazy_static! {
     static ref CHANNEL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
@@ -26,10 +25,10 @@ lazy_static! {
     .unwrap();
     static ref SPECTRUM_GAUGE: GaugeVec =
         register_gauge_vec!("spectrum", "Average spectrum data", &["channel"]).unwrap();
-    static ref PPS_GAUGE: Gauge =
-        register_gauge!("pps", "Number of packets we're processing per second").unwrap();
-    static ref DPS_GAUGE: Gauge =
-        register_gauge!("dps", "Number of packets we're dropping per second").unwrap();
+    static ref PACKET_GAUGE: IntGauge =
+        register_int_gauge!("processed_packets", "Number of packets we've processed").unwrap();
+    static ref DROP_GAUGE: IntGauge =
+        register_int_gauge!("dropped_packets", "Number of packets we've dropped").unwrap();
     static ref FFT_OVFL_GAUGE: IntGauge =
         register_int_gauge!("fft_ovfl", "Counter of FFT overflows").unwrap();
     static ref REQUANT_OVFL_GAUGE: IntGauge =
@@ -67,26 +66,18 @@ pub async fn metrics(
 #[allow(clippy::similar_names)]
 #[allow(clippy::missing_panics_doc)]
 pub fn monitor_task(
-    stat_receiver: &Receiver<(Stat, Duration)>,
+    stat_receiver: &Receiver<Stat>,
     spec_rcv: &Receiver<[f64; CHANNELS]>,
     all_chans: &AllChans,
     device: &Device,
 ) -> ! {
     info!("Starting monitoring task!");
-    let mut last_rcv = 0;
-    let mut last_drops = 0;
     loop {
         // Blocking here is ok, these are infrequent events
-        let (stat, dur) = stat_receiver.recv().unwrap();
+        let stat = stat_receiver.recv().unwrap();
 
         // Then wait for spectrum
         let avg_spec = spec_rcv.recv().unwrap();
-
-        // Process packet stats
-        let pps = (stat.received - last_rcv) as f32 / dur.as_secs_f32();
-        let dps = (stat.dropped - last_drops) as f32 / dur.as_secs_f32();
-        last_rcv = stat.received;
-        last_drops = stat.dropped;
 
         // Metrics from the FPGA
         if let Ok(v) = device.fpga.fft_overflow_cnt.read() {
@@ -128,8 +119,8 @@ pub fn monitor_task(
         }
 
         // Update metrics
-        PPS_GAUGE.set(pps.into());
-        DPS_GAUGE.set(dps.into());
+        PACKET_GAUGE.set(stat.received.into());
+        DROP_GAUGE.set((stat.dropped + stat.if_dropped).into());
         CHANNEL_GAUGE
             .with_label_values(&["to_split"])
             .set(all_chans.cap_payload.len().try_into().unwrap());

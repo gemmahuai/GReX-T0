@@ -12,7 +12,7 @@ pub struct Cli {
     #[arg(long, default_value_t = 60000)]
     #[clap(value_parser = clap::value_parser!(u16).range(1..))]
     pub cap_port: u16,
-    /// Port which we expect packets to be directed to
+    /// Port which we expect to receive trigger messages
     #[arg(long, default_value_t = 65432)]
     #[clap(value_parser = clap::value_parser!(u16).range(1..))]
     pub trig_port: u16,

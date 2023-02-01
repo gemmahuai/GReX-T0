@@ -157,6 +157,7 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
         }
         if waiting == PACKET_COUT_TIMEUOT {
             // Generate a fake, invalid packet to take its place
+            info!("Packet timeout");
             rb.next_needed += 1;
             payload_send.send(Payload::default()).unwrap();
             waiting = 0;
@@ -186,8 +187,6 @@ pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payl
         }
         // Drain
         for pl in rb.by_ref() {
-            // FIXME
-            info!("Draining!");
             payload_send.send(pl).unwrap();
         }
     }

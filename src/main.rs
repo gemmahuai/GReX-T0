@@ -4,14 +4,14 @@
 pub use clap::Parser;
 pub use crossbeam::channel::bounded;
 use grex_t0::{
-    args::{self, Exfil},
-    capture::{pcap_task, Capture},
-    common::{payload_split, AllChans},
+    args,
+    capture::cap_decode_sort_task,
+    common::AllChans,
     dumps::{dump_task, trigger_task, DumpRing},
-    exfil::{dada_consumer, dummy_consumer},
+    exfil::dummy_consumer,
     fpga::Device,
     monitoring::{metrics, monitor_task},
-    processing::{downsample_task, reorder_task},
+    processing::downsample_task,
 };
 use hyper::{server::conn::http1, service::service_fn};
 use log::{error, info, LevelFilter};
@@ -53,31 +53,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         device.force_pps();
     }
 
-    // Create the capture
-    let cap = Capture::new(&cli.cap_interface, cli.cap_port);
-
-    // Payloads from capture to reorder
-    let (payload_snd, payload_rcv) = bounded(10_000);
-    // Payloads from reorder to split
-    let (reorder_snd, reorder_rcv) = bounded(10_000);
-    // Payloads from split to dump ring and downsample
-    let (downsamp_snd, downsamp_rcv) = bounded(10_000);
-    let (dump_snd, dump_rcv) = bounded(10_000);
-    // Stats
-    let (stat_snd, stat_rcv) = bounded(100);
-    // Stokes out from downsample
-    let (stokes_snd, stokes_rcv) = bounded(100);
+    // Payloads from capture to downsample
+    let (cap_snd, downsamp_rcv) = bounded(100);
+    // Payloads from capture to dumps
+    let (cap_dump_snd, dumps_rcv) = bounded(100);
+    // Stokes from downsample to exfil
+    let (downsamp_snd, exfil_rcv) = bounded(100);
     // Triggers for dumping ring
     let (signal_snd, signal_rcv) = bounded(100);
-    // Average stokes data for monitoring
-    let (avg_stokes_snd, avg_stokes_rcv) = bounded(100);
 
     // Create the collection of channels that we can monitor
     let all_chans = AllChans {
-        stokes: stokes_rcv.clone(),
-        payload_to_downsample: downsamp_rcv.clone(),
-        payload_to_ring: dump_rcv.clone(),
-        cap_payload: payload_rcv.clone(),
+        stokes: exfil_rcv.clone(),
+        cap_to_downsample: downsamp_rcv.clone(),
+        cap_to_dump: dumps_rcv.clone(),
     };
 
     // Create the ring buffer to store voltage dumps
@@ -103,33 +92,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         };
     }
 
-    // FIXME
-    let reorder_task = std::thread::Builder::new()
-        .name("reorder".to_string())
-        .spawn(move || {
-            let mut cpu_set = CpuSet::new();
-            cpu_set.set(8).unwrap();
-            sched_setaffinity(Pid::from_raw(0), &cpu_set).unwrap();
-            reorder_task(&payload_rcv, &reorder_snd);
-        })
-        .unwrap();
-
     let handles = thread_spawn! {
-        "monitor"    : monitor_task(&stat_rcv, &avg_stokes_rcv, &all_chans, &device),
-        "dummy_exfil":     match cli.exfil {
-            Some(ex) => match ex {
-                Exfil::Psrdada { key, samples } => {
-                    dada_consumer(key, &stokes_rcv, &packet_start, samples);
-                }
-                Exfil::Filterbank => dummy_consumer(&stokes_rcv),
-            },
-            None => dummy_consumer(&stokes_rcv),
-        },
-        "downsample" : downsample_task(&downsamp_rcv, &stokes_snd, &avg_stokes_snd, cli.downsample),
-        "split"      : payload_split(&reorder_rcv, &downsamp_snd, &dump_snd),
-        "dump_fill"  : dump_task(dr, &dump_rcv, &signal_rcv, &packet_start),
+        "monitor"    : monitor_task(&all_chans, &device),
+        "dummy_exfil": dummy_consumer(&exfil_rcv),
+        "dump_fill"  : dump_task(dr, &dumps_rcv, &signal_rcv, &packet_start),
         "dump_trig"  : trigger_task(&signal_snd, &socket),
-        "capture"    : pcap_task(cap, &payload_snd, &stat_snd)
+        "downsample" : downsample_task(&downsamp_rcv, &downsamp_snd, cli.downsample_power),
+        "capture"    : cap_decode_sort_task(cli.cap_port, &cap_snd, &cap_dump_snd)
     };
 
     // And then finally spin up the webserver for metrics on the main thread
@@ -157,7 +126,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     for handle in handles {
         handle.join().unwrap();
     }
-    // FIXME
-    reorder_task.join().unwrap();
     Ok(())
 }

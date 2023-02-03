@@ -1,6 +1,5 @@
-use crate::common::{AllChans, CHANNELS};
+use crate::common::AllChans;
 use crate::fpga::Device;
-use crossbeam::channel::Receiver;
 use http_body_util::Full;
 use hyper::body::Bytes;
 use hyper::header::CONTENT_TYPE;
@@ -8,7 +7,6 @@ use hyper::http::HeaderValue;
 use hyper::{Request, Response};
 use lazy_static::lazy_static;
 use log::{info, warn};
-use pcap::Stat;
 use prometheus::{
     linear_buckets, register_gauge, register_gauge_vec, register_histogram_vec, register_int_gauge,
     register_int_gauge_vec, Encoder, Gauge, GaugeVec, HistogramVec, IntGauge, IntGaugeVec,
@@ -65,19 +63,14 @@ pub async fn metrics(
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::similar_names)]
 #[allow(clippy::missing_panics_doc)]
-pub fn monitor_task(
-    stat_receiver: &Receiver<Stat>,
-    spec_rcv: &Receiver<[f64; CHANNELS]>,
-    all_chans: &AllChans,
-    device: &Device,
-) -> ! {
+pub fn monitor_task(all_chans: &AllChans, device: &Device) -> ! {
     info!("Starting monitoring task!");
     loop {
         // Blocking here is ok, these are infrequent events
-        let stat = stat_receiver.recv().unwrap();
+        // let stat = stat_receiver.recv().unwrap();
 
         // Then wait for spectrum
-        let avg_spec = spec_rcv.recv().unwrap();
+        //let avg_spec = spec_rcv.recv().unwrap();
 
         // Metrics from the FPGA
         if let Ok(v) = device.fpga.fft_overflow_cnt.read() {
@@ -119,24 +112,21 @@ pub fn monitor_task(
         }
 
         // Update metrics
-        PACKET_GAUGE.set(stat.received.into());
-        DROP_GAUGE.set((stat.dropped + stat.if_dropped).into());
-        CHANNEL_GAUGE
-            .with_label_values(&["to_split"])
-            .set(all_chans.cap_payload.len().try_into().unwrap());
+        //PACKET_GAUGE.set(stat.received.into());
+        //DROP_GAUGE.set((stat.dropped + stat.if_dropped).into());
         CHANNEL_GAUGE
             .with_label_values(&["to_downsample"])
-            .set(all_chans.payload_to_downsample.len().try_into().unwrap());
+            .set(all_chans.cap_to_downsample.len().try_into().unwrap());
         CHANNEL_GAUGE
             .with_label_values(&["to_dump"])
-            .set(all_chans.payload_to_ring.len().try_into().unwrap());
+            .set(all_chans.cap_to_dump.len().try_into().unwrap());
         CHANNEL_GAUGE
             .with_label_values(&["to_exfil"])
             .set(all_chans.stokes.len().try_into().unwrap());
 
         // Update channel data
-        for (i, v) in avg_spec.into_iter().enumerate() {
-            SPECTRUM_GAUGE.with_label_values(&[&i.to_string()]).set(v);
-        }
+        // for (i, v) in avg_spec.into_iter().enumerate() {
+        //     SPECTRUM_GAUGE.with_label_values(&[&i.to_string()]).set(v);
+        // }
     }
 }

@@ -25,12 +25,12 @@ prometheus = "0.13"
 ndarray = "0.15"
 nix = "0.26"
 num-complex = "0.4"
-pcap = "1"
 polling = "2"
 pretty_env_logger = "0.4"
 psrdada = "0.2"
 regex = "1"
 rsntp = "3"
+socket2 = "0.4"
 tokio = { version = "^1.0", features = ["macros", "rt-multi-thread"] }
 
 [lib]

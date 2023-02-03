@@ -5,9 +5,6 @@ use std::{net::SocketAddr, ops::RangeInclusive};
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Network interface to capture packets on
-    #[arg(long)]
-    pub cap_interface: String,
     /// Port which we expect packets to be directed to
     #[arg(long, default_value_t = 60000)]
     #[clap(value_parser = clap::value_parser!(u16).range(1..))]
@@ -20,9 +17,9 @@ pub struct Cli {
     #[arg(long, default_value_t = 8083)]
     #[clap(value_parser = clap::value_parser!(u16).range(1..))]
     pub metrics_port: u16,
-    /// Downsample factor
-    #[arg(long, short, default_value_t = 4)]
-    pub downsample: u16,
+    /// Downsample power of 2, up to 9 (as that's the size of the capture window).
+    #[arg(long, short, default_value_t = 2)]
+    pub downsample_power: u32,
     /// Voltage buffer size as a power of 2
     #[arg(long, short, default_value_t = 22)]
     pub vbuf_power: u32,

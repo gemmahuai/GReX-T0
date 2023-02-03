@@ -1,23 +1,32 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
-use crate::common::{Channel, Payload};
+use crate::common::{Channel, Payload, Payloads};
+use anyhow::bail;
 use crossbeam::channel::Sender;
 use log::info;
-use pcap::Stat;
+use nix::{
+    errno::{errno, Errno},
+    libc::{iovec, mmsghdr, msghdr, recvfrom, recvmmsg, MSG_DONTWAIT},
+};
+use socket2::{Domain, Socket, Type};
+use std::{
+    ffi::c_void,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    os::unix::prelude::AsRawFd,
+    ptr::null_mut,
+};
 
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
 const WORD_SIZE: usize = 8;
 /// Size of the packet count header
 const TIMESTAMP_SIZE: usize = 8;
-// UDP Header size (spec-defined)
-const UDP_HEADER_SIZE: usize = 42;
 /// Total number of bytes in the spectra block of the UDP payload
 const SPECTRA_SIZE: usize = 8192;
 /// Total UDP payload size
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
-/// How many packets before we send statistics information to another thread
-/// This should be around ~4s
-const STAT_PACKET_INTERVAL: usize = 500_000;
+// Linux setting
+const RMEM_MAX: usize = 2_097_152;
+const PACKETS_PER_CAPTURE: usize = 512;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
@@ -46,65 +55,133 @@ impl Payload {
     }
 }
 
-pub struct Capture(pcap::Capture<pcap::Active>);
+pub struct Capture {
+    sock: Socket,
+    msgs: Vec<mmsghdr>,
+    buffers: Vec<Vec<u8>>,
+    _iovecs: Vec<iovec>,
+}
 
 impl Capture {
-    #[must_use]
-    #[allow(clippy::missing_panics_doc)]
-    pub fn new(device_name: &str, port: u16) -> Self {
-        // Grab the pcap device that matches this interface
-        let device = pcap::Device::list()
-            .expect("Error listing devices from Pcap")
-            .into_iter()
-            .find(|d| d.name == device_name)
-            .unwrap_or_else(|| panic!("Device named {device_name} not found"));
-        // Create the "capture"
-        let mut cap = pcap::Capture::from_device(device)
-            .expect("Failed to create capture")
-            .buffer_size(33_554_432) // Up to 20ms
-            .open()
-            .expect("Failed to open the capture");
-        // Add the port filter
-        cap.filter(&format!("dst port {port}"), true)
-            .expect("Error creating port filter");
-        // And return
-        Capture(cap)
+    /// Create and setup a new "bulk" capture using recvmmsg
+    #[allow(clippy::missing_errors_doc)]
+    pub fn new(port: u16, packets_per_capture: usize, packet_size: usize) -> anyhow::Result<Self> {
+        // Create the bog-standard UDP socket
+        let sock = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+        // Create its local address and bind
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port);
+        sock.bind(&addr.into())?;
+        // Make the recieve buffer huge
+        sock.set_recv_buffer_size(RMEM_MAX)?;
+        // Create the arrays on the heap to point the NIC to
+        let mut buffers = vec![vec![0u8; packet_size]; packets_per_capture];
+        // And connect up the scatter-gather buffers
+        // Crazy this isn't unsafe
+        let mut iovecs: Vec<_> = buffers
+            .iter_mut()
+            .map(|ptr| iovec {
+                iov_base: ptr.as_mut_ptr().cast::<c_void>(),
+                iov_len: packet_size,
+            })
+            .collect();
+        let msgs: Vec<_> = iovecs
+            .iter_mut()
+            .map(|ptr| mmsghdr {
+                msg_hdr: msghdr {
+                    msg_name: null_mut(),
+                    msg_namelen: 0,
+                    msg_iov: ptr as *mut iovec,
+                    msg_iovlen: 1,
+                    msg_control: null_mut(),
+                    msg_controllen: 0,
+                    msg_flags: 0,
+                },
+                msg_len: 0,
+            })
+            .collect();
+        Ok(Self {
+            sock,
+            msgs,
+            buffers,
+            _iovecs: iovecs,
+        })
     }
 
-    fn next_payload(&mut self) -> Option<RawPacket> {
-        let p = self.0.next_packet().unwrap();
-        if p.data.len() == (PAYLOAD_SIZE + UDP_HEADER_SIZE) {
-            Some(
-                p.data[UDP_HEADER_SIZE..]
-                    .try_into()
-                    .expect("We've already checked the size"),
+    // Wait for the capture to complete and return a reference to the vector of byte vectors
+    // Once we have rust 1.66 in guix, this should be a lending iterator-type thing
+    #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::missing_panics_doc)]
+    #[allow(clippy::cast_possible_wrap)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn capture(&mut self) -> anyhow::Result<&[Vec<u8>]> {
+        let ret = unsafe {
+            recvmmsg(
+                self.sock.as_raw_fd(),
+                self.msgs.as_mut_ptr(),
+                self.buffers.len().try_into().unwrap(),
+                0,
+                null_mut(),
             )
-        } else {
-            None
+        };
+        if ret != self.buffers.len() as i32 {
+            bail!("Not enough packets");
+        }
+        if ret == -1 {
+            bail!("Capture Error {:#?}", Errno::from_i32(errno()));
+        }
+        Ok(&self.buffers)
+    }
+
+    /// Clear the recieve buffers
+    #[allow(clippy::missing_errors_doc)]
+    pub fn clear(&mut self) -> anyhow::Result<()> {
+        let size = self.buffers[0].len();
+        let mut buf = vec![0u8; size];
+        loop {
+            let ret = unsafe {
+                recvfrom(
+                    self.sock.as_raw_fd(),
+                    buf.as_mut_ptr().cast::<c_void>(),
+                    size,
+                    MSG_DONTWAIT,
+                    null_mut(),
+                    null_mut(),
+                )
+            };
+            if ret == -1 {
+                match Errno::from_i32(errno()) {
+                    Errno::EAGAIN => return Ok(()),
+                    _ => bail!("Socket error: {:#?}", Errno::from_i32(errno())),
+                }
+            }
         }
     }
 }
 
-pub type RawPacket = [u8; PAYLOAD_SIZE];
-
 #[allow(clippy::missing_panics_doc)]
-pub fn pcap_task(
-    mut cap: Capture,
-    payload_sender: &Sender<Payload>,
-    stat_sender: &Sender<Stat>,
+// This task will capture a block, decode, and sort by index, and send to the ringbuffer and downsample tasks
+pub fn cap_decode_sort_task(
+    port: u16,
+    to_downsample: &Sender<Payloads>,
+    to_dumps: &Sender<Payloads>,
 ) -> ! {
     info!("Starting capture task!");
-    let mut monitor_count = 0;
+    // We have to construct the capture on this thread because the CFFI stuff isn't thread-safe
+    let mut cap = Capture::new(port, PACKETS_PER_CAPTURE, PAYLOAD_SIZE).unwrap();
+    cap.clear().unwrap();
     loop {
-        if monitor_count == STAT_PACKET_INTERVAL {
-            monitor_count = 0;
-            // We don't care about dropping stats, we *do* care about dropping packets
-            let _ = stat_sender.try_send(cap.0.stats().expect("Failed to get capture statistics"));
-        }
-        if let Some(bytes) = cap.next_payload() {
-            monitor_count += 1;
-            let pl = Payload::from_bytes(&bytes);
-            payload_sender.send(pl).unwrap();
-        }
+        // Capture a chunk of payloads
+        let chunk = cap.capture().unwrap();
+        // Decode into owned payloads
+        let mut payloads: Vec<_> = chunk
+            .iter()
+            .map(|bytes| Payload::from_bytes(bytes))
+            .collect();
+        // Sort (we need to somehow check for missing packets)
+        payloads.sort_by(|a, b| a.count.cmp(&b.count));
+        // Send
+        to_downsample.send(payloads.clone()).unwrap();
+        // This one won't cause backpressure because that only will happen when we're doing IO
+        let _result = to_dumps.try_send(payloads);
     }
 }

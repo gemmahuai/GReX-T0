@@ -1,6 +1,6 @@
 //! Dumping voltage data
 
-use crate::common::{Payload, CHANNELS};
+use crate::common::{Payload, Payloads, CHANNELS};
 use chrono::{DateTime, Utc};
 use crossbeam::{
     channel::{Receiver, Sender},
@@ -28,6 +28,12 @@ impl DumpRing {
 
     pub fn push(&mut self, payload: Payload) {
         self.container.force_push(payload);
+    }
+
+    pub fn append(&mut self, payloads: Payloads) {
+        for payload in payloads {
+            self.push(payload);
+        }
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
@@ -85,7 +91,7 @@ pub fn trigger_task(signal_sender: &Sender<()>, socket: &UdpSocket) -> ! {
 #[allow(clippy::missing_panics_doc)]
 pub fn dump_task(
     mut ring: DumpRing,
-    payload_reciever: &Receiver<Payload>,
+    payload_reciever: &Receiver<Payloads>,
     signal_reciever: &Receiver<()>,
     start_time: &DateTime<Utc>,
 ) -> ! {
@@ -100,8 +106,8 @@ pub fn dump_task(
             }
         } else {
             // If we're not dumping, we're pushing data into the ringbuffer
-            let payload = payload_reciever.recv().unwrap();
-            ring.push(payload);
+            let payloads = payload_reciever.recv().unwrap();
+            ring.append(payloads);
         }
     }
 }

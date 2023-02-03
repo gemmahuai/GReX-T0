@@ -1,192 +1,41 @@
 //! Inter-thread processing (downsampling, voltage ring buffer, etc)
 
-use crate::common::{Payload, Stokes, CHANNELS};
 use crossbeam::channel::{Receiver, Sender};
-use log::{info, warn};
-use std::collections::BTreeMap;
 
-// About 10s
-const MONITOR_SPEC_DOWNSAMPLE_FACTOR: usize = 305_180;
-// How many packets out of order do we want to be able to deal with? Vikram says 1000 is fine.
-const PACKET_REODER_BUF_SIZE: usize = 16384;
-// How long before we give up waiting - based on measuring, this is a decent upper bound as most are <50
-const PACKET_COUT_TIMEUOT: usize = 100;
+use crate::common::{Payloads, Stokes, CHANNELS};
 
 #[allow(clippy::missing_panics_doc)]
 #[allow(clippy::cast_precision_loss)]
-pub fn downsample_task(
-    payload_recv: &Receiver<Payload>,
-    stokes_send: &Sender<Stokes>,
-    avg_snd: &Sender<[f64; CHANNELS]>,
-    downsample_factor: u16,
-) -> ! {
-    info!("Starting downsample task");
-    // Preallocate averaging vector
-    let mut stokes_avg = [0f32; CHANNELS];
-    let mut stokes_idx = 0usize;
-    // Buffers and indices for monitoring
-    let mut monitor_avg = [0f64; CHANNELS];
-    let mut monitor_idx = 0usize;
-    loop {
-        let payload = payload_recv.recv().unwrap();
-        // Calculate stokes into the averaging buf (if it's valid)
-        if payload.valid {
-            stokes_avg
-                .iter_mut()
-                .zip(payload.stokes_i())
-                .for_each(|(x, y)| *x += y);
-        }
-        // If we're at the end, we're done with this average
-        if stokes_idx == downsample_factor as usize - 1 {
-            // Find the average into an f32 (which is lossless)
-            stokes_avg
-                .iter_mut()
-                .for_each(|v| *v /= f32::from(downsample_factor));
-            // Then, push this average to the monitoring average buffer
-            monitor_avg
-                .iter_mut()
-                .zip(stokes_avg)
-                .for_each(|(x, y)| *x += f64::from(y));
-            // If we've added enough monitor samples, average and send out that
-            if monitor_idx == MONITOR_SPEC_DOWNSAMPLE_FACTOR - 1 {
-                // Find the average into an f32 (which is lossless)
-                monitor_avg
-                    .iter_mut()
-                    .for_each(|v| *v /= MONITOR_SPEC_DOWNSAMPLE_FACTOR as f64);
-                // Don't block here
-                let _ = avg_snd.try_send(monitor_avg);
-                // And zero the averaging buf
-                monitor_avg = [0f64; CHANNELS];
+#[must_use]
+pub fn downsample(payloads: &Payloads, downsample_power: u32) -> Vec<Stokes> {
+    let chunk_size = 2usize.pow(downsample_power);
+    payloads
+        .chunks(chunk_size) // This should divide evenly if the payloads are in power of 2 chunks
+        .map(|pls| {
+            let mut stokes_avg = [0f32; CHANNELS];
+            for payload in pls {
+                if payload.valid {
+                    stokes_avg
+                        .iter_mut()
+                        .zip(payload.stokes_i())
+                        .for_each(|(x, y)| *x += y);
+                }
             }
-            // Increment the monitor index
-            monitor_idx = (monitor_idx + 1) % MONITOR_SPEC_DOWNSAMPLE_FACTOR;
-            // Send this average to the standard-rate stokes consumer
-            // This could back up if the consumer blocks (like with PSRDADA)
-            let _ = stokes_send.try_send(stokes_avg);
-            // And finally zero the averaging buf
-            stokes_avg = [0f32; CHANNELS];
-        }
-        // Increment the idx
-        stokes_idx = (stokes_idx + 1) % downsample_factor as usize;
-    }
-}
-
-struct ReorderBuf {
-    buf: Vec<Payload>,
-    free_idxs: Vec<usize>,
-    queued: BTreeMap<u64, usize>,
-    next_needed: u64,
-}
-
-impl ReorderBuf {
-    fn new() -> Self {
-        Self {
-            buf: vec![Payload::default(); PACKET_REODER_BUF_SIZE],
-            free_idxs: (0..PACKET_REODER_BUF_SIZE).collect(),
-            queued: BTreeMap::new(),
-            next_needed: 0,
-        }
-    }
-
-    /// Attempts to add a payload to the buffer, returning None if the buffer is full
-    fn push(&mut self, payload: &Payload) -> Option<()> {
-        // Get the next free index
-        let next_idx = self.free_idxs.pop()?;
-        // Associate its timestamp
-        self.queued.insert(payload.count, next_idx);
-        // Insert into the buffer
-        // Safety: These indices are correct by construction
-        *unsafe { self.buf.get_unchecked_mut(next_idx) } = *payload;
-        Some(())
-    }
-
-    /// Clear all the packets (without clearing memory)
-    fn reset(&mut self) {
-        self.queued.clear();
-        self.free_idxs = (0..PACKET_REODER_BUF_SIZE).collect();
-    }
-}
-
-impl Iterator for ReorderBuf {
-    type Item = Payload;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // Grab the index of the next needed (if it exists)
-        let idx = self.queued.remove(&self.next_needed)?;
-        // Recycle this index (mark it as free)
-        self.free_idxs.push(idx);
-        // Increment next needed
-        self.next_needed += 1;
-        // Return the payload
-        // Safety: These indices are correct by construction
-        Some(unsafe { *self.buf.get_unchecked(idx) })
-    }
-}
-
-#[cfg(test)]
-pub mod tests {
-    use super::*;
-
-    #[test]
-    fn test_reorder() {
-        let mut rb = ReorderBuf::new();
-        for i in (0..=127).rev() {
-            rb.push(&Payload {
-                count: i,
-                ..Default::default()
-            });
-        }
-        for (i, payload) in rb.by_ref().enumerate() {
-            assert_eq!(payload.count, i as u64);
-        }
-    }
+            stokes_avg.iter_mut().for_each(|v| *v /= chunk_size as f32);
+            stokes_avg
+        })
+        .collect()
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn reorder_task(payload_recv: &Receiver<Payload>, payload_send: &Sender<Payload>) -> ! {
-    let mut rb = ReorderBuf::new();
-    let mut first_payload = true;
-    let mut waiting = 0usize;
-    let mut last_waiting_count = 0u64;
+pub fn downsample_task(
+    receiver: &Receiver<Payloads>,
+    sender: &Sender<Vec<Stokes>>,
+    downsample_power: u32,
+) -> ! {
     loop {
-        if last_waiting_count == rb.next_needed {
-            waiting += 1;
-        } else {
-            last_waiting_count = rb.next_needed;
-            waiting = 0;
-        }
-        if waiting == PACKET_COUT_TIMEUOT {
-            // Generate a fake, invalid packet to take its place
-            rb.next_needed += 1;
-            payload_send.send(Payload::default()).unwrap();
-            waiting = 0;
-        }
-        // Grab the next payload
-        let payload = payload_recv.recv().unwrap();
-        // If this is the next payload we expect (or it's the first one), send it right away
-        // which avoids a copy in the not-out-of-order case
-        if first_payload || payload.count == rb.next_needed {
-            rb.next_needed = payload.count + 1;
-            payload_send.send(payload).unwrap();
-            if first_payload {
-                first_payload = false;
-            }
-        } else {
-            // Insert in our buffer
-            // If we run out of free slots (maybe the packet is totally gone (got corrupted or something)) we need to:
-            // - Reset the whole thing
-            // - Set the next needed to *this* payload's count + 1
-            // - Send off this packet that we couldn't push
-            if rb.push(&payload).is_none() {
-                warn!("Reorder buffer filled up while waiting for next payload. This shouldn't happen.",);
-                rb.next_needed = payload.count + 1;
-                rb.reset();
-                payload_send.send(payload).unwrap();
-            }
-        }
-        // Drain
-        for pl in rb.by_ref() {
-            payload_send.send(pl).unwrap();
-        }
+        sender
+            .send(downsample(&receiver.recv().unwrap(), downsample_power))
+            .unwrap();
     }
 }

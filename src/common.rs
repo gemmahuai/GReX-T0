@@ -1,7 +1,7 @@
 //! Common types shared between tasks
 
 use chrono::{DateTime, Utc};
-use crossbeam::channel::{Receiver, Sender};
+use crossbeam::channel::Receiver;
 use ndarray::{s, Array3, ArrayView};
 use num_complex::Complex;
 
@@ -57,12 +57,13 @@ pub struct Payload {
     pub valid: bool,
 }
 
+pub type Payloads = Vec<Payload>;
+
 #[derive(Debug)]
 pub struct AllChans {
-    pub cap_payload: Receiver<Payload>,
-    pub payload_to_downsample: Receiver<Payload>,
-    pub payload_to_ring: Receiver<Payload>,
-    pub stokes: Receiver<Stokes>,
+    pub stokes: Receiver<Vec<Stokes>>,
+    pub cap_to_downsample: Receiver<Payloads>,
+    pub cap_to_dump: Receiver<Payloads>,
 }
 
 impl Default for Payload {
@@ -131,21 +132,5 @@ impl Payload {
         let second_offset = self.count as f64 * PACKET_CADENCE;
         *start_time
             + chrono::Duration::from_std(std::time::Duration::from_secs_f64(second_offset)).unwrap()
-    }
-}
-
-// Splits a channel with a clone
-#[allow(clippy::missing_panics_doc)]
-pub fn payload_split(
-    rcv: &Receiver<Payload>,
-    to_downsample: &Sender<Payload>,
-    to_dumps: &Sender<Payload>,
-) {
-    loop {
-        let x = rcv.recv().unwrap();
-        // This should block if we get held up
-        to_downsample.send(x).unwrap();
-        // This one won't cause backpressure because that only will happen when we're doing IO
-        let _ = to_dumps.try_send(x);
     }
 }

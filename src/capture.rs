@@ -29,7 +29,7 @@ const SPECTRA_SIZE: usize = 8192;
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 // Linux setting
 const RMEM_MAX: usize = 2_097_152;
-const PACKETS_PER_CAPTURE: usize = 512;
+const PACKETS_PER_CAPTURE: usize = 4096;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload

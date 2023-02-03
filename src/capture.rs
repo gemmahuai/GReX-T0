@@ -2,7 +2,7 @@
 
 use crate::common::{Channel, Payload, Payloads};
 use anyhow::bail;
-use crossbeam::channel::Sender;
+use crossbeam::channel::{Receiver, Sender};
 use lazy_static::lazy_static;
 use log::info;
 use nix::{
@@ -210,28 +210,15 @@ pub struct Stats {
 const WARMUP_CHUNKS: usize = 4096;
 
 #[allow(clippy::missing_panics_doc)]
-// This task will capture a block, decode, and sort by index, and send to the ringbuffer and downsample tasks
-pub fn cap_decode_sort_task(
-    port: u16,
-    to_downsample: &Sender<Payloads>,
-    to_dumps: &Sender<Payloads>,
-    to_monitor: &Sender<Stats>,
-) -> ! {
+pub fn cap_decode_task(port: u16, cap_send: &Sender<Payloads>) {
     info!("Starting capture task!");
     // We have to construct the capture on this thread because the CFFI stuff isn't thread-safe
     let mut cap = Capture::new(port, PACKETS_PER_CAPTURE, PAYLOAD_SIZE).unwrap();
     cap.clear().unwrap();
-    let mut oldest_count = 0u64;
     info!("Warming up capture thread");
     // Clear out FIFOs
     for _ in 0..WARMUP_CHUNKS {
-        let pls = cap.capture().unwrap();
-        oldest_count = pls
-            .iter()
-            .map(|p| u64::from_be_bytes(p[0..8].try_into().unwrap()))
-            .max()
-            .unwrap()
-            + 1;
+        let _ = cap.capture().unwrap();
     }
     info!("Starting pipeline");
     loop {
@@ -242,8 +229,29 @@ pub fn cap_decode_sort_task(
             .iter()
             .map(|bytes| Payload::from_bytes(bytes))
             .collect();
+        // Send
+        cap_send.send(payloads).unwrap();
+    }
+}
+
+#[allow(clippy::missing_panics_doc)]
+// This task will sort by index, and send to the ringbuffer and downsample tasks
+pub fn sort_split_task(
+    from_cap: &Receiver<Payloads>,
+    to_downsample: &Sender<Payloads>,
+    to_dumps: &Sender<Payloads>,
+    to_monitor: &Sender<Stats>,
+) -> ! {
+    let mut oldest_count = None;
+    loop {
+        // Receive
+        let payloads = from_cap.recv().unwrap();
+        // First iter edge case
+        if oldest_count.is_none() {
+            oldest_count = Some(payloads.iter().map(|p| p.count).min().unwrap());
+        }
         // Sort
-        let (sorted, dropped) = stateful_sort(payloads, oldest_count);
+        let (sorted, dropped) = stateful_sort(from_cap.recv().unwrap(), oldest_count.unwrap());
         // Send
         to_downsample.send(sorted.clone()).unwrap();
         // This one won't cause backpressure because that only will happen when we're doing IO
@@ -254,6 +262,6 @@ pub fn cap_decode_sort_task(
             dropped: dropped as u64,
         });
         // And then increment our next expected oldest
-        oldest_count += PACKETS_PER_CAPTURE as u64;
+        oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);
     }
 }

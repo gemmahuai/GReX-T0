@@ -5,7 +5,7 @@ pub use clap::Parser;
 pub use crossbeam::channel::bounded;
 use grex_t0::{
     args,
-    capture::cap_decode_sort_task,
+    capture::{cap_decode_task, sort_split_task},
     common::AllChans,
     dumps::{dump_task, trigger_task, DumpRing},
     exfil::dummy_consumer,
@@ -52,11 +52,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if cli.trig {
         device.force_pps();
     }
-
-    // Payloads from capture to downsample
-    let (cap_snd, downsamp_rcv) = bounded(100);
-    // Payloads from capture to dumps
-    let (cap_dump_snd, dumps_rcv) = bounded(100);
+    // Payloads from cap to sort split
+    let (cap_snd, ss_rcv) = bounded(100);
+    // Payloads from sort split to downsample
+    let (ss_snd, downsamp_rcv) = bounded(100);
+    // Payloads from sort split to dumps
+    let (ss_dump_snd, dumps_rcv) = bounded(100);
     // Stokes from downsample to exfil
     let (downsamp_snd, exfil_rcv) = bounded(100);
     // Big averaged stokes from downsample to monitoring
@@ -68,9 +69,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Create the collection of channels that we can monitor
     let all_chans = AllChans {
-        stokes: exfil_rcv.clone(),
-        cap_to_downsample: downsamp_rcv.clone(),
-        cap_to_dump: dumps_rcv.clone(),
+        to_exfil: exfil_rcv.clone(),
+        to_downsample: downsamp_rcv.clone(),
+        to_dump: dumps_rcv.clone(),
+        to_sort: ss_rcv.clone(),
     };
 
     // Create the ring buffer to store voltage dumps
@@ -102,7 +104,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         "dump_fill"  : dump_task(dr, &dumps_rcv, &signal_rcv, &packet_start),
         "dump_trig"  : trigger_task(&signal_snd, &socket),
         "downsample" : downsample_task(&downsamp_rcv, &downsamp_snd, &downsamp_mon_snd, cli.downsample_power),
-        "capture"    : cap_decode_sort_task(cli.cap_port, &cap_snd, &cap_dump_snd, &cap_stat_snd)
+        "sort_split" : sort_split_task(&ss_rcv, &ss_snd, &ss_dump_snd, &cap_stat_snd),
+        "capture"    : cap_decode_task(cli.cap_port, &cap_snd)
     };
 
     // And then finally spin up the webserver for metrics on the main thread

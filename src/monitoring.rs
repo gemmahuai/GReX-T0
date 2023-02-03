@@ -123,13 +123,16 @@ pub fn monitor_task(
         DROP_GAUGE.add(stat.dropped.try_into().unwrap());
         CHANNEL_GAUGE
             .with_label_values(&["to_downsample"])
-            .set(all_chans.cap_to_downsample.len().try_into().unwrap());
+            .set(all_chans.to_downsample.len().try_into().unwrap());
         CHANNEL_GAUGE
             .with_label_values(&["to_dump"])
-            .set(all_chans.cap_to_dump.len().try_into().unwrap());
+            .set(all_chans.to_dump.len().try_into().unwrap());
         CHANNEL_GAUGE
             .with_label_values(&["to_exfil"])
-            .set(all_chans.stokes.len().try_into().unwrap());
+            .set(all_chans.to_exfil.len().try_into().unwrap());
+        CHANNEL_GAUGE
+            .with_label_values(&["to_sort"])
+            .set(all_chans.to_sort.len().try_into().unwrap());
 
         // Update channel data
         for (i, v) in avg_spec.into_iter().enumerate() {

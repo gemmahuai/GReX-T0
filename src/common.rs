@@ -60,9 +60,10 @@ pub type Payloads = Vec<Payload>;
 
 #[derive(Debug)]
 pub struct AllChans {
-    pub stokes: Receiver<Vec<Stokes>>,
-    pub cap_to_downsample: Receiver<Payloads>,
-    pub cap_to_dump: Receiver<Payloads>,
+    pub to_sort: Receiver<Payloads>,
+    pub to_exfil: Receiver<Vec<Stokes>>,
+    pub to_downsample: Receiver<Payloads>,
+    pub to_dump: Receiver<Payloads>,
 }
 
 impl Default for Payload {

@@ -29,7 +29,7 @@ const SPECTRA_SIZE: usize = 8192;
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 // Linux setting
 const RMEM_MAX: usize = 2_097_152;
-const PACKETS_PER_CAPTURE: usize = 4096;
+const PACKETS_PER_CAPTURE: usize = 1024;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
@@ -211,7 +211,7 @@ pub struct Stats {
 }
 
 // Try to clear the FIFOs
-const WARMUP_CHUNKS: usize = 4096;
+const WARMUP_CHUNKS: usize = 512;
 
 #[allow(clippy::missing_panics_doc)]
 pub fn cap_decode_task(port: u16, cap_send: &Sender<Payloads>) {
@@ -254,6 +254,12 @@ pub fn sort_split_task(
         if oldest_count.is_none() {
             oldest_count = Some(payloads.iter().map(|p| p.count).min().unwrap());
         }
+        // DEBUG PRINT REMOVE
+        println!(
+            "{} - {}",
+            payloads.iter().map(|p| p.count).min().unwrap(),
+            payloads.iter().map(|p| p.count).max().unwrap()
+        );
         // Sort
         let (sorted, dropped) = stateful_sort(from_cap.recv().unwrap(), oldest_count.unwrap());
         // Send

@@ -212,6 +212,9 @@ pub struct Stats {
     pub dropped: u64,
 }
 
+// Try to clear the FIFOs
+const WARMUP_CHUNKS: usize = 1024;
+
 #[allow(clippy::missing_panics_doc)]
 // This task will capture a block, decode, and sort by index, and send to the ringbuffer and downsample tasks
 pub fn cap_decode_sort_task(
@@ -224,7 +227,17 @@ pub fn cap_decode_sort_task(
     // We have to construct the capture on this thread because the CFFI stuff isn't thread-safe
     let mut cap = Capture::new(port, PACKETS_PER_CAPTURE, PAYLOAD_SIZE).unwrap();
     cap.clear().unwrap();
-    let mut oldest_count = None;
+    let mut oldest_count = 0u64;
+    // Clear out FIFOs
+    for _ in 0..WARMUP_CHUNKS {
+        let pls = cap.capture().unwrap();
+        oldest_count = pls
+            .iter()
+            .map(|p| u64::from_be_bytes(p[0..8].try_into().unwrap()))
+            .max()
+            .unwrap()
+            + 1;
+    }
     loop {
         // Capture a chunk of payloads
         let chunk = cap.capture().unwrap();
@@ -233,15 +246,8 @@ pub fn cap_decode_sort_task(
             .iter()
             .map(|bytes| Payload::from_bytes(bytes))
             .collect();
-        // Deal with the first payload edge case
-        if oldest_count.is_none() {
-            // Use max to deal with lingering ancient packets in FIFO
-            // So, we'll drop a lot all at once, then hopefully be better for it
-            oldest_count = Some(payloads.iter().map(|p| p.count).max().unwrap() + 1);
-            continue;
-        }
         // Sort
-        let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
+        let (sorted, dropped) = stateful_sort(payloads, oldest_count);
         // Send
         to_downsample.send(sorted.clone()).unwrap();
         // This one won't cause backpressure because that only will happen when we're doing IO
@@ -252,6 +258,6 @@ pub fn cap_decode_sort_task(
             dropped: dropped as u64,
         });
         // And then increment our next expected oldest
-        oldest_count = Some(oldest_count.unwrap() + PAYLOAD_SIZE as u64);
+        oldest_count += PAYLOAD_SIZE as u64;
     }
 }

@@ -3,6 +3,7 @@
 use crate::common::{Channel, Payload, Payloads};
 use anyhow::bail;
 use crossbeam::channel::Sender;
+use lazy_static::lazy_static;
 use log::info;
 use nix::{
     errno::{errno, Errno},
@@ -10,10 +11,12 @@ use nix::{
 };
 use socket2::{Domain, Socket, Type};
 use std::{
+    collections::{HashMap, HashSet},
     ffi::c_void,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     os::unix::prelude::AsRawFd,
     ptr::null_mut,
+    sync::{Arc, Mutex},
 };
 
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
@@ -156,30 +159,92 @@ impl Capture {
     }
 }
 
+lazy_static! {
+    static ref UNSORTED_PAYLOADS: Arc<Mutex<HashMap<u64, Payload>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+}
+
+/// Returns sorted payloads, how many we dropped in the process
+#[allow(clippy::cast_possible_truncation)]
+fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
+    let n = payloads.len();
+    let mut drops = 0usize;
+    let mut sorted = vec![Payload::default(); n];
+    let mut to_fill = (oldest_count..(oldest_count + n as u64)).collect::<HashSet<_>>();
+    // Get a local ref to the global buffer
+    let mut unsorted = UNSORTED_PAYLOADS.lock().unwrap();
+
+    // For each payload in the input, find the slot it corresponds to in the output and insert it
+    for payload in payloads {
+        if payload.count < oldest_count {
+            // If it is from the past, throw it out and increment the drop count
+            drops += 1;
+        } else if payload.count >= (oldest_count + n as u64) {
+            // If it is for the future, add to the hashmap
+            unsorted.insert(payload.count, payload);
+        } else {
+            // Mark that this spot is filled
+            to_fill.remove(&payload.count);
+            // And insert it into sorted
+            sorted[(payload.count - oldest_count) as usize] = payload;
+        }
+    }
+
+    // Now fill in the gaps with data we have
+    for missing_count in to_fill {
+        if let Some(pl) = unsorted.remove(&missing_count) {
+            sorted[(pl.count - oldest_count) as usize] = pl;
+        }
+    }
+
+    // And everything else are zeros
+    (sorted, drops)
+}
+
+pub struct Stats {
+    pub captured: u64,
+    pub dropped: u64,
+}
+
 #[allow(clippy::missing_panics_doc)]
 // This task will capture a block, decode, and sort by index, and send to the ringbuffer and downsample tasks
 pub fn cap_decode_sort_task(
     port: u16,
     to_downsample: &Sender<Payloads>,
     to_dumps: &Sender<Payloads>,
+    to_monitor: &Sender<Stats>,
 ) -> ! {
     info!("Starting capture task!");
     // We have to construct the capture on this thread because the CFFI stuff isn't thread-safe
     let mut cap = Capture::new(port, PACKETS_PER_CAPTURE, PAYLOAD_SIZE).unwrap();
     cap.clear().unwrap();
+    let mut oldest_count = None;
     loop {
         // Capture a chunk of payloads
         let chunk = cap.capture().unwrap();
         // Decode into owned payloads
-        let mut payloads: Vec<_> = chunk
+        let payloads: Vec<_> = chunk
             .iter()
             .map(|bytes| Payload::from_bytes(bytes))
             .collect();
-        // Sort (we need to somehow check for missing packets)
-        payloads.sort_by(|a, b| a.count.cmp(&b.count));
+        // Deal with the first payload edge case
+        if oldest_count.is_none() {
+            // Use max to deal with lingering ancient packets in FIFO
+            // So, we'll drop a lot all at once, then hopefully be better for it
+            oldest_count = Some(payloads.iter().map(|p| p.count).max().unwrap());
+        }
+        // Sort
+        let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
         // Send
-        to_downsample.send(payloads.clone()).unwrap();
+        to_downsample.send(sorted.clone()).unwrap();
         // This one won't cause backpressure because that only will happen when we're doing IO
-        let _result = to_dumps.try_send(payloads);
+        let _result = to_dumps.try_send(sorted);
+        // Send stats (no backpressure)
+        let _ = to_monitor.try_send(Stats {
+            captured: PAYLOAD_SIZE as u64,
+            dropped: dropped as u64,
+        });
+        // And then increment our next expected oldest
+        oldest_count = Some(oldest_count.unwrap() + PAYLOAD_SIZE as u64);
     }
 }

@@ -1,3 +1,4 @@
+use crate::capture::Stats;
 use crate::common::{AllChans, Stokes};
 use crate::fpga::Device;
 use crossbeam::channel::Receiver;
@@ -64,11 +65,16 @@ pub async fn metrics(
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::similar_names)]
 #[allow(clippy::missing_panics_doc)]
-pub fn monitor_task(all_chans: &AllChans, device: &Device, spec_rcv: &Receiver<Stokes>) -> ! {
+pub fn monitor_task(
+    all_chans: &AllChans,
+    device: &Device,
+    spec_rcv: &Receiver<Stokes>,
+    cap_stat_rcv: &Receiver<Stats>,
+) -> ! {
     info!("Starting monitoring task!");
     loop {
         // Blocking here is ok, these are infrequent events
-        // let stat = stat_receiver.recv().unwrap();
+        let stat = cap_stat_rcv.recv().unwrap();
 
         // Then wait for spectrum
         let avg_spec = spec_rcv.recv().unwrap();
@@ -113,8 +119,8 @@ pub fn monitor_task(all_chans: &AllChans, device: &Device, spec_rcv: &Receiver<S
         }
 
         // Update metrics
-        //PACKET_GAUGE.set(stat.received.into());
-        //DROP_GAUGE.set((stat.dropped + stat.if_dropped).into());
+        PACKET_GAUGE.add(stat.captured.try_into().unwrap());
+        DROP_GAUGE.add(stat.dropped.try_into().unwrap());
         CHANNEL_GAUGE
             .with_label_values(&["to_downsample"])
             .set(all_chans.cap_to_downsample.len().try_into().unwrap());

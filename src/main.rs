@@ -63,6 +63,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (downsamp_mon_snd, stokes_mon_rcv) = bounded(100);
     // Triggers for dumping ring
     let (signal_snd, signal_rcv) = bounded(100);
+    // Capture statistics for monitoring
+    let (cap_stat_snd, monitor_stat_rcv) = bounded(100);
 
     // Create the collection of channels that we can monitor
     let all_chans = AllChans {
@@ -95,12 +97,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     let handles = thread_spawn! {
-        "monitor"    : monitor_task(&all_chans, &device, &stokes_mon_rcv),
+        "monitor"    : monitor_task(&all_chans, &device, &stokes_mon_rcv, &monitor_stat_rcv),
         "dummy_exfil": dummy_consumer(&exfil_rcv),
         "dump_fill"  : dump_task(dr, &dumps_rcv, &signal_rcv, &packet_start),
         "dump_trig"  : trigger_task(&signal_snd, &socket),
         "downsample" : downsample_task(&downsamp_rcv, &downsamp_snd, &downsamp_mon_snd, cli.downsample_power),
-        "capture"    : cap_decode_sort_task(cli.cap_port, &cap_snd, &cap_dump_snd)
+        "capture"    : cap_decode_sort_task(cli.cap_port, &cap_snd, &cap_dump_snd, &cap_stat_snd)
     };
 
     // And then finally spin up the webserver for metrics on the main thread

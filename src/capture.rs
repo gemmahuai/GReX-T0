@@ -4,7 +4,7 @@ use crate::common::{Channel, Payload, Payloads};
 use anyhow::bail;
 use crossbeam::channel::{Receiver, Sender};
 use lazy_static::lazy_static;
-use log::info;
+use log::{info, warn};
 use nix::{
     errno::{errno, Errno},
     libc::{iovec, mmsghdr, msghdr, recvfrom, recvmmsg, MSG_DONTWAIT},
@@ -188,6 +188,10 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
             // And insert it into sorted
             sorted[(payload.count - oldest_count) as usize] = payload;
         }
+    }
+
+    if to_fill.len() == PACKETS_PER_CAPTURE {
+        warn!("Current capture window didn't contain a single payload we expected");
     }
 
     // Now fill in the gaps with data we have

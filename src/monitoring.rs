@@ -1,5 +1,6 @@
-use crate::common::AllChans;
+use crate::common::{AllChans, Stokes};
 use crate::fpga::Device;
+use crossbeam::channel::Receiver;
 use http_body_util::Full;
 use hyper::body::Bytes;
 use hyper::header::CONTENT_TYPE;
@@ -63,14 +64,14 @@ pub async fn metrics(
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::similar_names)]
 #[allow(clippy::missing_panics_doc)]
-pub fn monitor_task(all_chans: &AllChans, device: &Device) -> ! {
+pub fn monitor_task(all_chans: &AllChans, device: &Device, spec_rcv: &Receiver<Stokes>) -> ! {
     info!("Starting monitoring task!");
     loop {
         // Blocking here is ok, these are infrequent events
         // let stat = stat_receiver.recv().unwrap();
 
         // Then wait for spectrum
-        //let avg_spec = spec_rcv.recv().unwrap();
+        let avg_spec = spec_rcv.recv().unwrap();
 
         // Metrics from the FPGA
         if let Ok(v) = device.fpga.fft_overflow_cnt.read() {
@@ -125,8 +126,10 @@ pub fn monitor_task(all_chans: &AllChans, device: &Device) -> ! {
             .set(all_chans.stokes.len().try_into().unwrap());
 
         // Update channel data
-        // for (i, v) in avg_spec.into_iter().enumerate() {
-        //     SPECTRUM_GAUGE.with_label_values(&[&i.to_string()]).set(v);
-        // }
+        for (i, v) in avg_spec.into_iter().enumerate() {
+            SPECTRUM_GAUGE
+                .with_label_values(&[&i.to_string()])
+                .set(f64::from(v));
+        }
     }
 }

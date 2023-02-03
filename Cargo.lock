@@ -872,6 +872,7 @@ dependencies = [
  "hifitime",
  "http-body-util",
  "hyper",
+ "itertools",
  "lazy_static",
  "lending-iterator",
  "log",

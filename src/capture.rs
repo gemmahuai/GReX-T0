@@ -49,8 +49,6 @@ impl Payload {
                 .try_into()
                 .expect("This is exactly 8 bytes"),
         );
-        // This is real data, so it is valid
-        payload.valid = true;
         payload
     }
 }

@@ -59,6 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (cap_dump_snd, dumps_rcv) = bounded(100);
     // Stokes from downsample to exfil
     let (downsamp_snd, exfil_rcv) = bounded(100);
+    // Big averaged stokes from downsample to monitoring
+    let (downsamp_mon_snd, stokes_mon_rcv) = bounded(100);
     // Triggers for dumping ring
     let (signal_snd, signal_rcv) = bounded(100);
 
@@ -93,11 +95,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     let handles = thread_spawn! {
-        "monitor"    : monitor_task(&all_chans, &device),
+        "monitor"    : monitor_task(&all_chans, &device, &stokes_mon_rcv),
         "dummy_exfil": dummy_consumer(&exfil_rcv),
         "dump_fill"  : dump_task(dr, &dumps_rcv, &signal_rcv, &packet_start),
         "dump_trig"  : trigger_task(&signal_snd, &socket),
-        "downsample" : downsample_task(&downsamp_rcv, &downsamp_snd, cli.downsample_power),
+        "downsample" : downsample_task(&downsamp_rcv, &downsamp_snd, &downsamp_mon_snd, cli.downsample_power),
         "capture"    : cap_decode_sort_task(cli.cap_port, &cap_snd, &cap_dump_snd)
     };
 

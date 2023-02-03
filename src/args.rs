@@ -18,6 +18,7 @@ pub struct Cli {
     #[clap(value_parser = clap::value_parser!(u16).range(1..))]
     pub metrics_port: u16,
     /// Downsample power of 2, up to 9 (as that's the size of the capture window).
+    #[clap(value_parser = clap::value_parser!(u32).range(1..=9))]
     #[arg(long, short, default_value_t = 2)]
     pub downsample_power: u32,
     /// Voltage buffer size as a power of 2
@@ -37,6 +38,7 @@ pub struct Cli {
     pub trig: bool,
     /// Requantization gain
     #[arg(long)]
+    #[arg(long, default_value_t = 2)]
     pub requant_gain: u32,
     /// Exfil method - leaving this unspecified will not save stokes data
     #[command(subcommand)]

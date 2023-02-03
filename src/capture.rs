@@ -167,24 +167,23 @@ lazy_static! {
 /// Returns sorted payloads, how many we dropped in the process
 #[allow(clippy::cast_possible_truncation)]
 fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
-    let n = payloads.len();
     let mut drops = 0usize;
-    let mut sorted = vec![Payload::default(); n];
-    let mut to_fill = (oldest_count..(oldest_count + n as u64)).collect::<HashSet<_>>();
+    let mut sorted = vec![Payload::default(); PAYLOAD_SIZE];
+    let mut to_fill = (oldest_count..(oldest_count + PAYLOAD_SIZE as u64)).collect::<HashSet<_>>();
     // Get a local ref to the global buffer
     let mut unsorted = UNSORTED_PAYLOADS.lock().unwrap();
 
     // For each payload in the input, find the slot it corresponds to in the output and insert it
     for payload in payloads {
         println!(
-            "Payload-{},Min-{oldest_count},Max-{}",
+            "Payload {}, Min {oldest_count}, Max {}",
             payload.count,
-            oldest_count + n as u64
+            oldest_count + PAYLOAD_SIZE as u64 - 1
         );
         if payload.count < oldest_count {
             // If it is from the past, throw it out and increment the drop count
             drops += 1;
-        } else if payload.count >= (oldest_count + n as u64) {
+        } else if payload.count >= (oldest_count + PAYLOAD_SIZE as u64) {
             // If it is for the future, add to the hashmap
             unsorted.insert(payload.count, payload);
         } else {
@@ -239,6 +238,7 @@ pub fn cap_decode_sort_task(
             + 1;
     }
     loop {
+        println!("{oldest_count}");
         // Capture a chunk of payloads
         let chunk = cap.capture().unwrap();
         // Decode into owned payloads

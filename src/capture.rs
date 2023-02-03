@@ -231,7 +231,8 @@ pub fn cap_decode_sort_task(
         if oldest_count.is_none() {
             // Use max to deal with lingering ancient packets in FIFO
             // So, we'll drop a lot all at once, then hopefully be better for it
-            oldest_count = Some(payloads.iter().map(|p| p.count).max().unwrap());
+            oldest_count = Some(payloads.iter().map(|p| p.count).max().unwrap() + 1);
+            continue;
         }
         // Sort
         let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());

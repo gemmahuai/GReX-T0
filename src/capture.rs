@@ -176,11 +176,6 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
 
     // For each payload in the input, find the slot it corresponds to in the output and insert it
     for payload in payloads {
-        println!(
-            "Payload {}, Min {oldest_count}, Max {}",
-            payload.count,
-            oldest_count + PACKETS_PER_CAPTURE as u64 - 1
-        );
         if payload.count < oldest_count {
             // If it is from the past, throw it out and increment the drop count
             drops += 1;
@@ -192,7 +187,6 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
             to_fill.remove(&payload.count);
             // And insert it into sorted
             sorted[(payload.count - oldest_count) as usize] = payload;
-            println!("Fits");
         }
     }
 
@@ -241,7 +235,6 @@ pub fn cap_decode_sort_task(
     }
     info!("Starting pipeline");
     loop {
-        println!("{oldest_count}");
         // Capture a chunk of payloads
         let chunk = cap.capture().unwrap();
         // Decode into owned payloads

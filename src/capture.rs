@@ -213,7 +213,7 @@ pub struct Stats {
 }
 
 // Try to clear the FIFOs
-const WARMUP_CHUNKS: usize = 1024;
+const WARMUP_CHUNKS: usize = 4096;
 
 #[allow(clippy::missing_panics_doc)]
 // This task will capture a block, decode, and sort by index, and send to the ringbuffer and downsample tasks
@@ -228,6 +228,7 @@ pub fn cap_decode_sort_task(
     let mut cap = Capture::new(port, PACKETS_PER_CAPTURE, PAYLOAD_SIZE).unwrap();
     cap.clear().unwrap();
     let mut oldest_count = 0u64;
+    info!("Warming up capture thread");
     // Clear out FIFOs
     for _ in 0..WARMUP_CHUNKS {
         let pls = cap.capture().unwrap();
@@ -238,6 +239,7 @@ pub fn cap_decode_sort_task(
             .unwrap()
             + 1;
     }
+    info!("Starting pipeline");
     loop {
         println!("{oldest_count}");
         // Capture a chunk of payloads

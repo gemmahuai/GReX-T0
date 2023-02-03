@@ -174,6 +174,8 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
     // Get a local ref to the global buffer
     let mut unsorted = UNSORTED_PAYLOADS.lock().unwrap();
 
+    println!("{}", oldest_count);
+
     // For each payload in the input, find the slot it corresponds to in the output and insert it
     for payload in payloads {
         if payload.count < oldest_count {
@@ -187,6 +189,7 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
             to_fill.remove(&payload.count);
             // And insert it into sorted
             sorted[(payload.count - oldest_count) as usize] = payload;
+            println!("Fits");
         }
     }
 

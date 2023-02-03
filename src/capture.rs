@@ -168,8 +168,9 @@ lazy_static! {
 #[allow(clippy::cast_possible_truncation)]
 fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
     let mut drops = 0usize;
-    let mut sorted = vec![Payload::default(); PAYLOAD_SIZE];
-    let mut to_fill = (oldest_count..(oldest_count + PAYLOAD_SIZE as u64)).collect::<HashSet<_>>();
+    let mut sorted = vec![Payload::default(); PACKETS_PER_CAPTURE];
+    let mut to_fill =
+        (oldest_count..(oldest_count + PACKETS_PER_CAPTURE as u64)).collect::<HashSet<_>>();
     // Get a local ref to the global buffer
     let mut unsorted = UNSORTED_PAYLOADS.lock().unwrap();
 
@@ -178,12 +179,12 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
         println!(
             "Payload {}, Min {oldest_count}, Max {}",
             payload.count,
-            oldest_count + PAYLOAD_SIZE as u64 - 1
+            oldest_count + PACKETS_PER_CAPTURE as u64 - 1
         );
         if payload.count < oldest_count {
             // If it is from the past, throw it out and increment the drop count
             drops += 1;
-        } else if payload.count >= (oldest_count + PAYLOAD_SIZE as u64) {
+        } else if payload.count >= (oldest_count + PACKETS_PER_CAPTURE as u64) {
             // If it is for the future, add to the hashmap
             unsorted.insert(payload.count, payload);
         } else {
@@ -254,10 +255,10 @@ pub fn cap_decode_sort_task(
         let _result = to_dumps.try_send(sorted);
         // Send stats (no backpressure)
         let _ = to_monitor.try_send(Stats {
-            captured: PAYLOAD_SIZE as u64,
+            captured: PACKETS_PER_CAPTURE as u64,
             dropped: dropped as u64,
         });
         // And then increment our next expected oldest
-        oldest_count += PAYLOAD_SIZE as u64;
+        oldest_count += PACKETS_PER_CAPTURE as u64;
     }
 }

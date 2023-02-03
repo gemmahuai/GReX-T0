@@ -174,10 +174,13 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
     // Get a local ref to the global buffer
     let mut unsorted = UNSORTED_PAYLOADS.lock().unwrap();
 
-    println!("{}", oldest_count);
-
     // For each payload in the input, find the slot it corresponds to in the output and insert it
     for payload in payloads {
+        println!(
+            "Payload-{},Min-{oldest_count},Max-{}",
+            payload.count,
+            oldest_count + n as u64
+        );
         if payload.count < oldest_count {
             // If it is from the past, throw it out and increment the drop count
             drops += 1;

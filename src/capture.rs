@@ -29,7 +29,7 @@ const SPECTRA_SIZE: usize = 8192;
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 // Linux setting
 const RMEM_MAX: usize = 2_097_152;
-const PACKETS_PER_CAPTURE: usize = 256;
+const PACKETS_PER_CAPTURE: usize = 1024;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
@@ -241,7 +241,7 @@ pub struct Stats {
 }
 
 // Try to clear the FIFOs
-const WARMUP_CHUNKS: usize = 512;
+const WARMUP_CHUNKS: usize = 64;
 
 #[allow(clippy::missing_panics_doc)]
 pub fn cap_task(port: u16, cap_send: &Sender<Vec<Vec<u8>>>) {

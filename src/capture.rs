@@ -268,7 +268,7 @@ pub fn cap_task(port: u16, cap_send: &Sender<Vec<Vec<u8>>>) {
         // Capture a chunk of payloads
         let chunk = cap.capture().unwrap();
         // Send
-        cap_send.send(chunk.to_vec()).unwrap();
+        let _ = cap_send.try_send(chunk.to_vec());
     }
 }
 

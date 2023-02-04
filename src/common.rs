@@ -60,7 +60,7 @@ pub type Payloads = Vec<Payload>;
 
 #[derive(Debug)]
 pub struct AllChans {
-    pub to_sort: Receiver<Payloads>,
+    pub to_sort: Receiver<Vec<Vec<u8>>>,
     pub to_exfil: Receiver<Vec<Stokes>>,
     pub to_downsample: Receiver<Payloads>,
     pub to_dump: Receiver<Payloads>,

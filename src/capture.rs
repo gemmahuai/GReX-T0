@@ -214,7 +214,7 @@ pub struct Stats {
 const WARMUP_CHUNKS: usize = 512;
 
 #[allow(clippy::missing_panics_doc)]
-pub fn cap_decode_task(port: u16, cap_send: &Sender<Payloads>) {
+pub fn cap_task(port: u16, cap_send: &Sender<Vec<Vec<u8>>>) {
     info!("Starting capture task!");
     // We have to construct the capture on this thread because the CFFI stuff isn't thread-safe
     let mut cap = Capture::new(port, PACKETS_PER_CAPTURE, PAYLOAD_SIZE).unwrap();
@@ -228,20 +228,15 @@ pub fn cap_decode_task(port: u16, cap_send: &Sender<Payloads>) {
     loop {
         // Capture a chunk of payloads
         let chunk = cap.capture().unwrap();
-        // Decode into owned payloads
-        let payloads: Vec<_> = chunk
-            .iter()
-            .map(|bytes| Payload::from_bytes(bytes))
-            .collect();
         // Send
-        cap_send.send(payloads).unwrap();
+        cap_send.send(chunk.to_vec()).unwrap();
     }
 }
 
 #[allow(clippy::missing_panics_doc)]
-// This task will sort by index, and send to the ringbuffer and downsample tasks
+// This task will decode incoming packets, sort by index, and send to the ringbuffer and downsample tasks
 pub fn sort_split_task(
-    from_cap: &Receiver<Payloads>,
+    from_cap: &Receiver<Vec<Vec<u8>>>,
     to_downsample: &Sender<Payloads>,
     to_dumps: &Sender<Payloads>,
     to_monitor: &Sender<Stats>,
@@ -249,7 +244,12 @@ pub fn sort_split_task(
     let mut oldest_count = None;
     loop {
         // Receive
-        let payloads = from_cap.recv().unwrap();
+        let packets = from_cap.recv().unwrap();
+        // Decode
+        let payloads: Vec<_> = packets
+            .iter()
+            .map(|bytes| Payload::from_bytes(bytes))
+            .collect();
         // First iter edge case
         if oldest_count.is_none() {
             oldest_count = Some(payloads.iter().map(|p| p.count).min().unwrap());
@@ -261,7 +261,7 @@ pub fn sort_split_task(
             payloads.iter().map(|p| p.count).max().unwrap()
         );
         // Sort
-        let (sorted, dropped) = stateful_sort(from_cap.recv().unwrap(), oldest_count.unwrap());
+        let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
         // Send
         to_downsample.send(sorted.clone()).unwrap();
         // This one won't cause backpressure because that only will happen when we're doing IO

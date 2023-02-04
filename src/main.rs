@@ -5,7 +5,7 @@ pub use clap::Parser;
 pub use crossbeam::channel::bounded;
 use grex_t0::{
     args,
-    capture::{cap_decode_task, sort_split_task},
+    capture::{cap_task, sort_split_task},
     common::AllChans,
     dumps::{dump_task, trigger_task, DumpRing},
     exfil::dummy_consumer,
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         "dump_trig"  : trigger_task(&signal_snd, &socket),
         "downsample" : downsample_task(&downsamp_rcv, &downsamp_snd, &downsamp_mon_snd, cli.downsample_power),
         "sort_split" : sort_split_task(&ss_rcv, &ss_snd, &ss_dump_snd, &cap_stat_snd),
-        "capture"    : cap_decode_task(cli.cap_port, &cap_snd)
+        "capture"    : cap_task(cli.cap_port, &cap_snd)
     };
 
     // And then finally spin up the webserver for metrics on the main thread

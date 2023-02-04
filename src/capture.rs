@@ -202,9 +202,8 @@ lazy_static! {
 
 /// Returns sorted payloads, how many we dropped in the process
 #[allow(clippy::cast_possible_truncation)]
-fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Option<Payloads>, usize) {
+fn stateful_sort(payloads: Payloads, oldest_count: u64, target: &mut Payloads) -> usize {
     let mut drops = 0usize;
-    let mut sorted = vec![Payload::default(); PACKETS_PER_CAPTURE];
     let mut to_fill =
         (oldest_count..(oldest_count + PACKETS_PER_CAPTURE as u64)).collect::<HashSet<_>>();
     // Get a local ref to the global buffer
@@ -225,7 +224,7 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Option<Payloads>, us
             // Mark that this spot is filled
             to_fill.remove(&payload.count);
             // And insert it into sorted
-            sorted[(payload.count - oldest_count) as usize] = payload;
+            target[(payload.count - oldest_count) as usize] = payload;
         }
     }
 
@@ -233,18 +232,18 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Option<Payloads>, us
         warn!("Not a single payload in this chunk was expected, moving expected count forward");
         let dropped = PACKETS_PER_CAPTURE + unsorted.len();
         unsorted.clear();
-        return (None, dropped);
+        return dropped;
     }
 
     // Now fill in the gaps with data we have
     for missing_count in to_fill {
         if let Some(pl) = unsorted.remove(&missing_count) {
-            sorted[(pl.count - oldest_count) as usize] = pl;
+            target[(pl.count - oldest_count) as usize] = pl;
         }
     }
 
     // And everything else are zeros
-    (Some(sorted), drops)
+    drops
 }
 
 pub struct Stats {
@@ -285,7 +284,7 @@ pub fn sort_split_task(
         // Receive
         let packets = from_cap.recv().unwrap();
         // Decode
-        let mut payloads: Vec<_> = packets
+        let payloads: Vec<_> = packets
             .iter()
             .map(|bytes| Payload::from_bytes(bytes))
             .collect();
@@ -294,25 +293,19 @@ pub fn sort_split_task(
             oldest_count = Some(payloads.iter().map(|p| p.count).min().unwrap());
         }
         // Sort
-        // let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
-        // if let Some(sorted) = sorted {
-        //     // Send
-        //     to_downsample.send(sorted.clone()).unwrap();
-        //     // This one won't cause backpressure because that only will happen when we're doing IO
-        //     let _result = to_dumps.try_send(sorted);
-        //     // And then increment our next expected oldest
-        //     oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);
-        // } else {
-        //     oldest_count = None;
-        // }
-        payloads.sort_by(|a, b| a.count.cmp(&b.count));
-        to_downsample.send(payloads.clone()).unwrap();
-        let _result = to_dumps.try_send(payloads);
+        let mut sorted = payloads.clone();
+        let dropped = stateful_sort(payloads, oldest_count.unwrap(), &mut sorted);
+        // Send
+        to_downsample.send(sorted.clone()).unwrap();
+        // This one won't cause backpressure because that only will happen when we're doing IO
+        let _result = to_dumps.try_send(sorted);
+        // And then increment our next expected oldest
+        oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);
 
         // Send stats (no backpressure)
         let _ = to_monitor.try_send(Stats {
             captured: PACKETS_PER_CAPTURE as u64,
-            dropped: 0usize as u64,
+            dropped: dropped as u64,
         });
     }
 }

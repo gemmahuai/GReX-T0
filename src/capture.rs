@@ -190,10 +190,6 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
         }
     }
 
-    if to_fill.len() == PACKETS_PER_CAPTURE {
-        warn!("Current capture window didn't contain a single payload we expected");
-    }
-
     // Now fill in the gaps with data we have
     for missing_count in to_fill {
         if let Some(pl) = unsorted.remove(&missing_count) {
@@ -255,11 +251,11 @@ pub fn sort_split_task(
             oldest_count = Some(payloads.iter().map(|p| p.count).min().unwrap());
         }
         // DEBUG PRINT REMOVE
-        println!(
-            "{}",
-            payloads.iter().map(|p| p.count).max().unwrap()
-                - payloads.iter().map(|p| p.count).min().unwrap(),
-        );
+        // println!(
+        //     "{}",
+        //     payloads.iter().map(|p| p.count).max().unwrap()
+        //         - payloads.iter().map(|p| p.count).min().unwrap(),
+        // );
         // Sort
         let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
         // Send

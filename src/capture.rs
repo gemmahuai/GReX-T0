@@ -116,7 +116,7 @@ impl Capture {
     #[allow(clippy::missing_panics_doc)]
     #[allow(clippy::cast_possible_wrap)]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn capture(&mut self) -> anyhow::Result<&[Vec<u8>]> {
+    pub fn capture(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
         let ret = unsafe {
             recvmmsg(
                 self.sock.as_raw_fd(),
@@ -132,7 +132,7 @@ impl Capture {
         if ret == -1 {
             bail!("Capture Error {:#?}", Errno::from_i32(errno()));
         }
-        Ok(&self.buffers)
+        Ok(self.buffers.clone())
     }
 
     /// Clear the recieve buffers
@@ -260,14 +260,14 @@ pub fn cap_task(port: u16, cap_send: &Sender<Vec<Vec<u8>>>) {
     info!("Warming up capture thread");
     // Clear out FIFOs
     for _ in 0..WARMUP_CHUNKS {
-        let _ = cap.capture().unwrap();
+        let _cap = cap.capture().unwrap();
     }
     info!("Starting pipeline");
     loop {
         // Capture a chunk of payloads
         let chunk = cap.capture().unwrap();
         // Send
-        cap_send.send(chunk.to_vec()).unwrap();
+        cap_send.send(chunk).unwrap();
     }
 }
 

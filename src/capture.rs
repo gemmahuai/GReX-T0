@@ -285,7 +285,7 @@ pub fn sort_split_task(
         // Receive
         let packets = from_cap.recv().unwrap();
         // Decode
-        let payloads: Vec<_> = packets
+        let mut payloads: Vec<_> = packets
             .iter()
             .map(|bytes| Payload::from_bytes(bytes))
             .collect();
@@ -305,6 +305,7 @@ pub fn sort_split_task(
         // } else {
         //     oldest_count = None;
         // }
+        payloads.sort_by(|a, b| a.count.cmp(&b.count));
         to_downsample.send(payloads.clone()).unwrap();
         let _result = to_dumps.try_send(payloads);
 

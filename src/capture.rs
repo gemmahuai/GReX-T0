@@ -31,7 +31,7 @@ pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 const RMEM_MAX: usize = 2_097_152;
 const PACKETS_PER_CAPTURE: usize = 32768;
 // Try to clear the FIFOs
-const WARMUP_CHUNKS: usize = 1;
+const WARMUP_CHUNKS: usize = 32;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload

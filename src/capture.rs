@@ -4,7 +4,7 @@ use crate::common::{Channel, Payload, Payloads};
 use anyhow::bail;
 use crossbeam::channel::{Receiver, Sender};
 use lazy_static::lazy_static;
-use log::{info, warn};
+use log::{error, info, warn};
 use nix::{
     errno::{errno, Errno},
     libc::{iovec, mmsghdr, msghdr, recvfrom, recvmmsg, MSG_DONTWAIT},
@@ -159,9 +159,40 @@ impl Capture {
     }
 }
 
+struct PayloadBuf {
+    map: HashMap<u64, usize>,
+    buf: Vec<Payload>,
+    free_idxs: Vec<usize>,
+}
+
+impl PayloadBuf {
+    fn new(size: usize) -> Self {
+        Self {
+            map: HashMap::new(),
+            buf: vec![Payload::default(); size],
+            free_idxs: (0..size).collect(),
+        }
+    }
+    fn remove(&mut self, count: &u64) -> Option<Payload> {
+        let idx = self.map.remove(count)?;
+        self.free_idxs.push(idx);
+        Some(self.buf[idx])
+    }
+    fn insert(&mut self, payload: &Payload) -> Option<()> {
+        let next_idx = self.free_idxs.pop()?;
+        self.map.insert(payload.count, next_idx);
+        self.buf[next_idx] = *payload;
+        Some(())
+    }
+    fn clear(&mut self) {
+        self.map.clear();
+        self.free_idxs = (0..self.buf.len()).collect();
+    }
+}
+
 lazy_static! {
-    static ref UNSORTED_PAYLOADS: Arc<Mutex<HashMap<u64, Payload>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    static ref UNSORTED_PAYLOADS: Arc<Mutex<PayloadBuf>> =
+        Arc::new(Mutex::new(PayloadBuf::new(4096)));
 }
 
 /// Returns sorted payloads, how many we dropped in the process
@@ -181,7 +212,10 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
             drops += 1;
         } else if payload.count >= (oldest_count + PACKETS_PER_CAPTURE as u64) {
             // If it is for the future, add to the hashmap
-            unsorted.insert(payload.count, payload);
+            if unsorted.insert(&payload).is_none() {
+                error!("Reorder overflow");
+                unsorted.clear();
+            }
         } else {
             // Mark that this spot is filled
             to_fill.remove(&payload.count);
@@ -257,16 +291,16 @@ pub fn sort_split_task(
         //         - payloads.iter().map(|p| p.count).min().unwrap(),
         // );
         // Sort
-        //let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
-        payloads.sort_by(|a, b| a.count.cmp(&b.count));
+        let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
+        // payloads.sort_by(|a, b| a.count.cmp(&b.count));
         // Send
-        to_downsample.send(payloads.clone()).unwrap();
+        to_downsample.send(sorted.clone()).unwrap();
         // This one won't cause backpressure because that only will happen when we're doing IO
-        let _result = to_dumps.try_send(payloads);
+        let _result = to_dumps.try_send(sorted);
         // Send stats (no backpressure)
         let _ = to_monitor.try_send(Stats {
             captured: PACKETS_PER_CAPTURE as u64,
-            dropped: 0u64,
+            dropped: dropped as u64,
         });
         // And then increment our next expected oldest
         oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);

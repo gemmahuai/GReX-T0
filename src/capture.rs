@@ -188,16 +188,19 @@ impl PayloadBuf {
         self.map.clear();
         self.free_idxs = (0..self.buf.len()).collect();
     }
+    fn len(&self) -> usize {
+        self.map.len()
+    }
 }
 
 lazy_static! {
     static ref UNSORTED_PAYLOADS: Arc<Mutex<PayloadBuf>> =
-        Arc::new(Mutex::new(PayloadBuf::new(4096)));
+        Arc::new(Mutex::new(PayloadBuf::new(32768)));
 }
 
 /// Returns sorted payloads, how many we dropped in the process
 #[allow(clippy::cast_possible_truncation)]
-fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
+fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Option<Payloads>, usize) {
     let mut drops = 0usize;
     let mut sorted = vec![Payload::default(); PACKETS_PER_CAPTURE];
     let mut to_fill =
@@ -224,6 +227,13 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
         }
     }
 
+    if to_fill.len() == PACKETS_PER_CAPTURE {
+        warn!("Not a single payload in this chunk was expected, moving expected count forward");
+        let dropped = PACKETS_PER_CAPTURE + unsorted.len();
+        unsorted.clear();
+        return (None, dropped);
+    }
+
     // Now fill in the gaps with data we have
     for missing_count in to_fill {
         if let Some(pl) = unsorted.remove(&missing_count) {
@@ -232,7 +242,7 @@ fn stateful_sort(payloads: Payloads, oldest_count: u64) -> (Payloads, usize) {
     }
 
     // And everything else are zeros
-    (sorted, drops)
+    (Some(sorted), drops)
 }
 
 pub struct Stats {
@@ -276,7 +286,7 @@ pub fn sort_split_task(
         // Receive
         let packets = from_cap.recv().unwrap();
         // Decode
-        let mut payloads: Vec<_> = packets
+        let payloads: Vec<_> = packets
             .iter()
             .map(|bytes| Payload::from_bytes(bytes))
             .collect();
@@ -284,25 +294,23 @@ pub fn sort_split_task(
         if oldest_count.is_none() {
             oldest_count = Some(payloads.iter().map(|p| p.count).min().unwrap());
         }
-        // DEBUG PRINT REMOVE
-        // println!(
-        //     "{}",
-        //     payloads.iter().map(|p| p.count).max().unwrap()
-        //         - payloads.iter().map(|p| p.count).min().unwrap(),
-        // );
         // Sort
         let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
-        // payloads.sort_by(|a, b| a.count.cmp(&b.count));
-        // Send
-        to_downsample.send(sorted.clone()).unwrap();
-        // This one won't cause backpressure because that only will happen when we're doing IO
-        let _result = to_dumps.try_send(sorted);
+        if let Some(sorted) = sorted {
+            // Send
+            to_downsample.send(sorted.clone()).unwrap();
+            // This one won't cause backpressure because that only will happen when we're doing IO
+            let _result = to_dumps.try_send(sorted);
+            // And then increment our next expected oldest
+            oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);
+        } else {
+            oldest_count = None;
+        }
+
         // Send stats (no backpressure)
         let _ = to_monitor.try_send(Stats {
             captured: PACKETS_PER_CAPTURE as u64,
             dropped: dropped as u64,
         });
-        // And then increment our next expected oldest
-        oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);
     }
 }

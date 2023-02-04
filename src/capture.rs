@@ -29,9 +29,9 @@ const SPECTRA_SIZE: usize = 8192;
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 // Linux setting
 const RMEM_MAX: usize = 2_097_152;
-const PACKETS_PER_CAPTURE: usize = 32768;
+const PACKETS_PER_CAPTURE: usize = 64;
 // Try to clear the FIFOs
-const WARMUP_CHUNKS: usize = 32;
+const WARMUP_CHUNKS: usize = 2048;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
@@ -304,12 +304,12 @@ pub fn sort_split_task(
         );
 
         // Sort
-        let sorted = payloads.clone();
+        //let sorted = payloads.clone();
         //let dropped = stateful_sort(payloads, oldest_count.unwrap(), &mut sorted);
         // Send
-        to_downsample.send(sorted.clone()).unwrap();
+        to_downsample.send(payloads.clone()).unwrap();
         // This one won't cause backpressure because that only will happen when we're doing IO
-        let _result = to_dumps.try_send(sorted);
+        let _result = to_dumps.try_send(payloads);
         // And then increment our next expected oldest
         oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);
 

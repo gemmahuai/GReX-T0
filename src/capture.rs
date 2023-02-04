@@ -268,7 +268,7 @@ pub fn cap_task(port: u16, cap_send: &Sender<Vec<Vec<u8>>>) {
         // Capture a chunk of payloads
         let chunk = cap.capture().unwrap();
         // Send
-        let _ = cap_send.try_send(chunk.to_vec());
+        cap_send.send(chunk.to_vec()).unwrap();
     }
 }
 
@@ -294,22 +294,24 @@ pub fn sort_split_task(
             oldest_count = Some(payloads.iter().map(|p| p.count).min().unwrap());
         }
         // Sort
-        let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
-        if let Some(sorted) = sorted {
-            // Send
-            to_downsample.send(sorted.clone()).unwrap();
-            // This one won't cause backpressure because that only will happen when we're doing IO
-            let _result = to_dumps.try_send(sorted);
-            // And then increment our next expected oldest
-            oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);
-        } else {
-            oldest_count = None;
-        }
+        // let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
+        // if let Some(sorted) = sorted {
+        //     // Send
+        //     to_downsample.send(sorted.clone()).unwrap();
+        //     // This one won't cause backpressure because that only will happen when we're doing IO
+        //     let _result = to_dumps.try_send(sorted);
+        //     // And then increment our next expected oldest
+        //     oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);
+        // } else {
+        //     oldest_count = None;
+        // }
+        to_downsample.send(payloads.clone()).unwrap();
+        let _result = to_dumps.try_send(payloads);
 
         // Send stats (no backpressure)
         let _ = to_monitor.try_send(Stats {
             captured: PACKETS_PER_CAPTURE as u64,
-            dropped: dropped as u64,
+            dropped: 0usize as u64,
         });
     }
 }

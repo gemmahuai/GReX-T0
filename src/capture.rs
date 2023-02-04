@@ -29,7 +29,7 @@ const SPECTRA_SIZE: usize = 8192;
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 // Linux setting
 const RMEM_MAX: usize = 2_097_152;
-const PACKETS_PER_CAPTURE: usize = 512;
+const PACKETS_PER_CAPTURE: usize = 32768;
 // Try to clear the FIFOs
 const WARMUP_CHUNKS: usize = 1;
 
@@ -292,9 +292,20 @@ pub fn sort_split_task(
         if oldest_count.is_none() {
             oldest_count = Some(payloads.iter().map(|p| p.count).min().unwrap());
         }
+
+        let counts: Vec<_> = payloads.iter().map(|p| p.count).collect();
+
+        println!(
+            "Payload Chunk Counts {}-{}, Target Chunk Range {}-{}",
+            counts.iter().min().unwrap(),
+            counts.iter().max().unwrap(),
+            oldest_count.unwrap(),
+            oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64 - 1
+        );
+
         // Sort
-        let mut sorted = payloads.clone();
-        let dropped = stateful_sort(payloads, oldest_count.unwrap(), &mut sorted);
+        let sorted = payloads.clone();
+        //let dropped = stateful_sort(payloads, oldest_count.unwrap(), &mut sorted);
         // Send
         to_downsample.send(sorted.clone()).unwrap();
         // This one won't cause backpressure because that only will happen when we're doing IO
@@ -305,7 +316,7 @@ pub fn sort_split_task(
         // Send stats (no backpressure)
         let _ = to_monitor.try_send(Stats {
             captured: PACKETS_PER_CAPTURE as u64,
-            dropped: dropped as u64,
+            dropped: 0usize as u64,
         });
     }
 }

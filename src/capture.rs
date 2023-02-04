@@ -29,7 +29,7 @@ const SPECTRA_SIZE: usize = 8192;
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 // Linux setting
 const RMEM_MAX: usize = 2_097_152;
-const PACKETS_PER_CAPTURE: usize = 1024;
+const PACKETS_PER_CAPTURE: usize = 256;
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
@@ -256,9 +256,9 @@ pub fn sort_split_task(
         }
         // DEBUG PRINT REMOVE
         println!(
-            "{} - {}",
-            payloads.iter().map(|p| p.count).min().unwrap(),
+            "{}",
             payloads.iter().map(|p| p.count).max().unwrap()
+                - payloads.iter().map(|p| p.count).min().unwrap(),
         );
         // Sort
         let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());

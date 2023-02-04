@@ -242,7 +242,7 @@ pub fn sort_split_task(
         // Receive
         let packets = from_cap.recv().unwrap();
         // Decode
-        let payloads: Vec<_> = packets
+        let mut payloads: Vec<_> = packets
             .iter()
             .map(|bytes| Payload::from_bytes(bytes))
             .collect();
@@ -257,15 +257,16 @@ pub fn sort_split_task(
         //         - payloads.iter().map(|p| p.count).min().unwrap(),
         // );
         // Sort
-        let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
+        //let (sorted, dropped) = stateful_sort(payloads, oldest_count.unwrap());
+        payloads.sort_by(|a, b| a.count.cmp(&b.count));
         // Send
-        to_downsample.send(sorted.clone()).unwrap();
+        to_downsample.send(payloads.clone()).unwrap();
         // This one won't cause backpressure because that only will happen when we're doing IO
-        let _result = to_dumps.try_send(sorted);
+        let _result = to_dumps.try_send(payloads);
         // Send stats (no backpressure)
         let _ = to_monitor.try_send(Stats {
             captured: PACKETS_PER_CAPTURE as u64,
-            dropped: dropped as u64,
+            dropped: 0u64,
         });
         // And then increment our next expected oldest
         oldest_count = Some(oldest_count.unwrap() + PACKETS_PER_CAPTURE as u64);

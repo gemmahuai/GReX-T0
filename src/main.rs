@@ -56,31 +56,21 @@ fn main() -> anyhow::Result<()> {
             let (d_s, d_r) = channel(100);
             let (s_s, s_r) = channel(5);
             // Decode split
-            let ds = tokio::spawn(capture::decode_split_task(pb_r, ds_s, d_s));
+            tokio::spawn(async move { capture::decode_split_task(pb_r, ds_s, d_s).await });
             // Downsample
-            let downsamp = tokio::spawn(processing::downsample_task(
-                ds_r,
-                ex_s,
-                cli.downsample_power,
-            ));
+            tokio::spawn(async move {
+                processing::downsample_task(ds_r, ex_s, cli.downsample_power).await
+            });
             // Exfil
-            let exfil = tokio::spawn(exfil::dummy_consumer(ex_r));
+            tokio::spawn(async move { exfil::dummy_consumer(ex_r).await });
             // Dumps
-            let dump = tokio::spawn(dumps::dump_task(d_r, s_r, packet_start, cli.vbuf_power));
-            let trig = tokio::spawn(dumps::trigger_task(s_s, cli.trig_port));
+            tokio::spawn(
+                async move { dumps::dump_task(d_r, s_r, packet_start, cli.vbuf_power).await },
+            );
+            tokio::spawn(async move { dumps::trigger_task(s_s, cli.trig_port).await });
             // Monitoring
-            let mon = tokio::spawn(monitoring::monitor_task(device));
-            let web = tokio::spawn(monitoring::start_web_server(cli.metrics_port));
-
-            // Join these all
-            ds.await;
-            downsamp.await;
-            exfil.await;
-            dump.await;
-            trig.await;
-            mon.await;
-            web.await;
-
+            tokio::spawn(async move { monitoring::monitor_task(device).await });
+            tokio::spawn(async move { monitoring::start_web_server(cli.metrics_port).await });
             Ok(())
         })
     });

@@ -15,6 +15,7 @@ use prometheus::{
 };
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::net::TcpListener;
 
 lazy_static! {
@@ -62,6 +63,7 @@ pub async fn metrics(
 pub async fn monitor_task(device: Device) -> ! {
     info!("Starting monitoring task!");
     loop {
+        tokio::time::sleep(Duration::from_secs(10)).await;
         // Blocking here is ok, these are infrequent events
         //let stat = cap_stat_rcv.recv().unwrap();
 

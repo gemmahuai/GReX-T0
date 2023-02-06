@@ -33,7 +33,7 @@ fn main() -> anyhow::Result<()> {
     let (pb_s, pb_r) = with_recycle(1024, capture::PayloadRecycle::new());
 
     // Create channels to connect everything else
-    let (ds_s, ds_r) = channel(1024);
+    let (ds_s, ds_r) = channel(32768);
     let (ex_s, ex_r) = channel(100);
     let (dump_s, dump_r) = channel(100);
     let (trig_s, trig_r) = channel(5);
@@ -112,7 +112,7 @@ fn main() -> anyhow::Result<()> {
             let rt = runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
-            rt.block_on(async move { capture::cap_task(cli.cap_port, pb_s, stat_s).await })
+            rt.block_on(async { capture::cap_task(cli.cap_port, pb_s, stat_s).await })
         })?;
 
     monitoring_tasks.join().unwrap().unwrap();

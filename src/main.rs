@@ -37,7 +37,7 @@ fn main() -> anyhow::Result<()> {
     }
     // Create a dedicated single-threaded async runtime for the capture task
     let (pb_s, pb_r) = with_recycle(32768, capture::PayloadRecycle::new());
-    std::thread::spawn(move || -> anyhow::Result<()> {
+    let cap_thread = std::thread::spawn(move || -> anyhow::Result<()> {
         // Bind this thread to a core
         if !core_affinity::set_for_current(CoreId { id: 8 }) {
             bail!("Couldn't set core affinity on capture thread");
@@ -58,22 +58,33 @@ fn main() -> anyhow::Result<()> {
         let (d_s, d_r) = channel(100);
         let (s_s, s_r) = channel(5);
         // Decode split
-        tokio::spawn(capture::decode_split_task(pb_r, ds_s, d_s));
+        let ds = tokio::spawn(capture::decode_split_task(pb_r, ds_s, d_s));
         // Downsample
-        tokio::spawn(processing::downsample_task(
+        let downsamp = tokio::spawn(processing::downsample_task(
             ds_r,
             ex_s,
             cli.downsample_power,
         ));
         // Exfil
-        tokio::spawn(exfil::dummy_consumer(ex_r));
+        let exfil = tokio::spawn(exfil::dummy_consumer(ex_r));
         // Dumps
-        tokio::spawn(dumps::dump_task(d_r, s_r, packet_start, cli.vbuf_power));
-        tokio::spawn(dumps::trigger_task(s_s, cli.trig_port));
+        let dump = tokio::spawn(dumps::dump_task(d_r, s_r, packet_start, cli.vbuf_power));
+        let trig = tokio::spawn(dumps::trigger_task(s_s, cli.trig_port));
         // Monitoring
-        tokio::spawn(monitoring::monitor_task(device));
-        tokio::spawn(monitoring::start_web_server(cli.metrics_port));
+        let mon = tokio::spawn(monitoring::monitor_task(device));
+        let web = tokio::spawn(monitoring::start_web_server(cli.metrics_port));
+
+        // Join these all
+        ds.await;
+        downsamp.await;
+        exfil.await;
+        dump.await;
+        trig.await;
+        mon.await;
+        web.await;
     });
+
+    cap_thread.join().unwrap().unwrap();
 
     Ok(())
 }

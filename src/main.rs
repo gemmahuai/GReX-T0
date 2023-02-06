@@ -69,8 +69,8 @@ fn main() -> anyhow::Result<()> {
         })?;
 
     // Spawn the more timing critical tasks
-    let critical_tasks = std::thread::Builder::new()
-        .name("processing".to_string())
+    let decode_downsample = std::thread::Builder::new()
+        .name("decode_downsample".to_string())
         .spawn(move || -> anyhow::Result<()> {
             if !core_affinity::set_for_current(CoreId { id: 9 }) {
                 bail!("Couldn't set core affinity on capture thread");
@@ -79,7 +79,7 @@ fn main() -> anyhow::Result<()> {
                 .enable_all()
                 .build()?;
             rt.block_on(async {
-                let (_, _, _, _) = try_join!(
+                let (_, _) = try_join!(
                     // Decode split
                     tokio::task::Builder::new()
                         .name("decode_split")
@@ -88,23 +88,36 @@ fn main() -> anyhow::Result<()> {
                     tokio::task::Builder::new().name("downsample").spawn(
                         processing::downsample_task(ds_r, ex_s, avg_s, cli.downsample_power)
                     )?,
-                    // Dumps
-                    tokio::task::Builder::new()
-                        .name("dump_fill")
-                        .spawn(dumps::dump_task(
-                            dump_r,
-                            trig_r,
-                            packet_start,
-                            cli.vbuf_power
-                        ))?,
-                    // Exfil
-                    tokio::task::Builder::new()
-                        .name("exfil")
-                        .spawn(exfil::dummy_consumer(ex_r))?
                 )?;
                 Ok(())
             })
         })?;
+
+    let dump_exfil =
+        std::thread::Builder::new()
+            .name("dump_exfil".to_string())
+            .spawn(move || -> anyhow::Result<()> {
+                if !core_affinity::set_for_current(CoreId { id: 10 }) {
+                    bail!("Couldn't set core affinity on capture thread");
+                }
+                let rt = runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?;
+                rt.block_on(async {
+                    let (_, _) =
+                        try_join!(
+                            // Dumps
+                            tokio::task::Builder::new().name("dump_fill").spawn(
+                                dumps::dump_task(dump_r, trig_r, packet_start, cli.vbuf_power)
+                            )?,
+                            // Exfil
+                            tokio::task::Builder::new()
+                                .name("exfil")
+                                .spawn(exfil::dummy_consumer(ex_r))?
+                        )?;
+                    Ok(())
+                })
+            })?;
 
     // And then finally the capture task
     let capture_task = std::thread::Builder::new()
@@ -120,8 +133,9 @@ fn main() -> anyhow::Result<()> {
         })?;
 
     monitoring_tasks.join().unwrap().unwrap();
-    critical_tasks.join().unwrap().unwrap();
+    decode_downsample.join().unwrap().unwrap();
     capture_task.join().unwrap().unwrap();
+    dump_exfil.join().unwrap().unwrap();
 
     Ok(())
 }

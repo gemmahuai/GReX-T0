@@ -40,14 +40,10 @@ fn main() -> anyhow::Result<()> {
     // Create a dedicated single-threaded async runtime for the capture task
     let (pb_s, pb_r) = with_recycle(32768, capture::PayloadRecycle::new());
 
-    // Bind this thread to a core
-    if !core_affinity::set_for_current(CoreId { id: 9 }) {
-        bail!("Couldn't set core affinity on capture thread");
-    }
     // Create a runtime for all the tasks
     let tasks = std::thread::spawn(move || -> anyhow::Result<()> {
         let rt = runtime::Builder::new_multi_thread()
-            .worker_threads(3)
+            .worker_threads(4)
             .enable_all()
             .build()?;
         rt.block_on(async {

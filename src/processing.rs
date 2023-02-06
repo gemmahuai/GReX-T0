@@ -61,6 +61,7 @@ pub async fn downsample_task(
         if last_monitor.elapsed() >= MONITOR_CADENCE {
             // Get a handle (non blocking) on the sender
             if let Ok(mut send_ref) = monitor.try_send_ref() {
+                info!("Sending spectrum data");
                 // And write averages
                 for (out_chan, avg_chan) in send_ref.iter_mut().zip(&monitor_buf) {
                     *out_chan = avg_chan / local_monitor_iters as f32;

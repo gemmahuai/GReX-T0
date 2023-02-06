@@ -5,7 +5,7 @@ use log::info;
 use std::time::{Duration, Instant};
 use thingbuf::mpsc::{Receiver, Sender};
 
-/// How long should the monitor integrations be?
+/// How many packets before we send one off to monitor
 const MONITOR_CADENCE: Duration = Duration::from_secs(10);
 
 #[allow(clippy::missing_panics_doc)]
@@ -37,6 +37,7 @@ pub async fn downsample_task(
             }
             // Check the monitor send condition
             if last_monitor.elapsed() >= MONITOR_CADENCE {
+                info!("Sending average spectrum");
                 // Get a handle on the monitor sender (but don't block)
                 if let Ok(mut mon_ref) = monitor.try_send_ref() {
                     // Write averages from the sender directly into it

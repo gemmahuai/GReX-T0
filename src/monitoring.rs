@@ -86,6 +86,9 @@ pub async fn monitor_task(
                     .with_label_values(&[&i.to_string()])
                     .set(f64::from(*v));
             }
+        } else {
+            // Channel closed
+            break;
         }
 
         // Metrics from the FPGA

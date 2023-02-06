@@ -150,7 +150,7 @@ impl Capture {
         let mut count = 0;
         loop {
             println!("{count}");
-            coount += 1;
+            count += 1;
             // Grab the next slot
             let mut slot = payload_sender.send_ref().await?;
             // By default, capture into the slot

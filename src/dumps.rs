@@ -1,18 +1,13 @@
 //! Dumping voltage data
 
-use crate::common::{Payload, Payloads, CHANNELS};
+use crate::common::{Payload, CHANNELS};
 use chrono::{DateTime, Utc};
-use crossbeam::{
-    channel::{Receiver, Sender},
-    queue::ArrayQueue,
-};
+use crossbeam_queue::ArrayQueue;
 use hdf5::File;
 use log::{info, warn};
-use polling::{Event, Poller};
-use std::net::UdpSocket;
-
-/// Trigger socket event key
-pub const TRIG_EVENT: usize = 42;
+use std::net::SocketAddr;
+use thingbuf::mpsc::{Receiver, Sender};
+use tokio::net::UdpSocket;
 
 pub struct DumpRing {
     container: ArrayQueue<Payload>,
@@ -28,12 +23,6 @@ impl DumpRing {
 
     pub fn push(&mut self, payload: Payload) {
         self.container.force_push(payload);
-    }
-
-    pub fn append(&mut self, payloads: Payloads) {
-        for payload in payloads {
-            self.push(payload);
-        }
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
@@ -63,51 +52,45 @@ impl DumpRing {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn trigger_task(signal_sender: &Sender<()>, socket: &UdpSocket) -> ! {
+pub async fn trigger_task(sender: Sender<()>, port: u16) -> anyhow::Result<()> {
     info!("Starting voltage ringbuffer trigger task!");
+    // Create the socket
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let sock = UdpSocket::bind(addr).await?;
     // Maybe even 0 would work, we don't expect data
     let mut buf = [0; 10];
-    // Create a poller and register interest in readability on the socket.
-    let poller = Poller::new().unwrap();
-    poller.add(socket, Event::readable(TRIG_EVENT)).unwrap();
-    // Socket event loop.
-    let mut events = Vec::new();
     loop {
-        // Wait for at least one I/O event.
-        events.clear();
-        poller.wait(&mut events, None).unwrap();
-        for ev in &events {
-            if ev.key == TRIG_EVENT {
-                match socket.recv_from(&mut buf) {
-                    Ok(_) => signal_sender.send(()).unwrap(),
-                    Err(e) => panic!("encountered IO error: {e}"),
-                }
-                poller.modify(socket, Event::readable(TRIG_EVENT)).unwrap();
-            }
-        }
+        sock.recv_from(&mut buf).await?;
+        sender.send(()).await?;
     }
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn dump_task(
-    mut ring: DumpRing,
-    payload_reciever: &Receiver<Payloads>,
-    signal_reciever: &Receiver<()>,
-    start_time: &DateTime<Utc>,
-) -> ! {
+pub async fn dump_task(
+    payload_reciever: Receiver<Payload>,
+    signal_reciever: Receiver<()>,
+    start_time: DateTime<Utc>,
+    vbuf_power: u32,
+) -> anyhow::Result<()> {
     info!("Starting voltage ringbuffer fill task!");
+    // Create the ring buffer to store voltage dumps
+    let mut ring = DumpRing::new(2usize.pow(vbuf_power));
     loop {
         // First check if we need to dump, as that takes priority
         if signal_reciever.try_recv().is_ok() {
             info!("Dumping ringbuffer");
-            match ring.dump(start_time) {
+            match ring.dump(&start_time) {
                 Ok(_) => (),
                 Err(e) => warn!("Error in dumping buffer - {}", e),
             }
         } else {
             // If we're not dumping, we're pushing data into the ringbuffer
-            let payloads = payload_reciever.recv().unwrap();
-            ring.append(payloads);
+            if let Some(payload) = payload_reciever.recv().await {
+                ring.push(payload);
+            } else {
+                break;
+            }
         }
     }
+    Ok(())
 }

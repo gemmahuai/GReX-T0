@@ -1,20 +1,21 @@
-use crate::capture::Stats;
-use crate::common::{AllChans, Stokes};
 use crate::fpga::Device;
-use crossbeam::channel::Receiver;
 use http_body_util::Full;
 use hyper::body::Bytes;
 use hyper::header::CONTENT_TYPE;
 use hyper::http::HeaderValue;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
 use hyper::{Request, Response};
 use lazy_static::lazy_static;
-use log::{info, warn};
+use log::{error, info, warn};
 use prometheus::{
     linear_buckets, register_gauge, register_gauge_vec, register_histogram_vec, register_int_gauge,
     register_int_gauge_vec, Encoder, Gauge, GaugeVec, HistogramVec, IntGauge, IntGaugeVec,
     TextEncoder,
 };
 use std::convert::Infallible;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
 
 lazy_static! {
     static ref CHANNEL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
@@ -44,9 +45,6 @@ lazy_static! {
     .unwrap();
 }
 
-#[allow(clippy::missing_panics_doc)]
-#[allow(clippy::missing_errors_doc)]
-#[allow(clippy::unused_async)]
 pub async fn metrics(
     _: Request<hyper::body::Incoming>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
@@ -61,23 +59,21 @@ pub async fn metrics(
     Ok(resp)
 }
 
-#[allow(clippy::cast_precision_loss)]
-#[allow(clippy::cast_possible_wrap)]
-#[allow(clippy::similar_names)]
-#[allow(clippy::missing_panics_doc)]
-pub fn monitor_task(
-    all_chans: &AllChans,
-    device: &Device,
-    spec_rcv: &Receiver<Stokes>,
-    cap_stat_rcv: &Receiver<Stats>,
-) -> ! {
+pub async fn monitor_task(device: Device) -> ! {
     info!("Starting monitoring task!");
     loop {
         // Blocking here is ok, these are infrequent events
-        let stat = cap_stat_rcv.recv().unwrap();
+        //let stat = cap_stat_rcv.recv().unwrap();
 
         // Then wait for spectrum
-        let avg_spec = spec_rcv.recv().unwrap();
+        // if let Some(avg_spec) = spec_rcv.recv().await {
+        //     // Update channel data
+        //     for (i, v) in avg_spec.into_iter().enumerate() {
+        //         SPECTRUM_GAUGE
+        //             .with_label_values(&[&i.to_string()])
+        //             .set(f64::from(v));
+        //     }
+        // }
 
         // Metrics from the FPGA
         if let Ok(v) = device.fpga.fft_overflow_cnt.read() {
@@ -119,26 +115,43 @@ pub fn monitor_task(
         }
 
         // Update metrics
-        PACKET_GAUGE.add(stat.captured.try_into().unwrap());
-        DROP_GAUGE.add(stat.dropped.try_into().unwrap());
-        CHANNEL_GAUGE
-            .with_label_values(&["to_downsample"])
-            .set(all_chans.to_downsample.len().try_into().unwrap());
-        CHANNEL_GAUGE
-            .with_label_values(&["to_dump"])
-            .set(all_chans.to_dump.len().try_into().unwrap());
-        CHANNEL_GAUGE
-            .with_label_values(&["to_exfil"])
-            .set(all_chans.to_exfil.len().try_into().unwrap());
-        CHANNEL_GAUGE
-            .with_label_values(&["to_sort"])
-            .set(all_chans.to_sort.len().try_into().unwrap());
-
-        // Update channel data
-        for (i, v) in avg_spec.into_iter().enumerate() {
-            SPECTRUM_GAUGE
-                .with_label_values(&[&i.to_string()])
-                .set(f64::from(v));
-        }
+        //PACKET_GAUGE.add(stat.captured.try_into().unwrap());
+        //DROP_GAUGE.add(stat.dropped.try_into().unwrap());
+        // CHANNEL_GAUGE
+        //     .with_label_values(&["to_downsample"])
+        //     .set(all_chans.to_downsample.len().try_into().unwrap());
+        // CHANNEL_GAUGE
+        //     .with_label_values(&["to_dump"])
+        //     .set(all_chans.to_dump.len().try_into().unwrap());
+        // CHANNEL_GAUGE
+        //     .with_label_values(&["to_exfil"])
+        //     .set(all_chans.to_exfil.len().try_into().unwrap());
+        // CHANNEL_GAUGE
+        //     .with_label_values(&["to_sort"])
+        //     .set(all_chans.to_sort.len().try_into().unwrap());
     }
+}
+
+pub async fn start_web_server(metrics_port: u16) -> anyhow::Result<()> {
+    info!("Starting metrics webserver");
+    let addr = SocketAddr::from(([0, 0, 0, 0], metrics_port));
+    let listener = TcpListener::bind(addr).await?;
+    loop {
+        let stream = match listener.accept().await {
+            Ok((stream, _)) => stream,
+            Err(e) => {
+                error!("TCP accept error: {}", e);
+                break;
+            }
+        };
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(stream, service_fn(metrics))
+                .await
+            {
+                println!("Error serving connection: {err:?}");
+            }
+        });
+    }
+    Ok(())
 }

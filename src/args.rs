@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
-use regex::Regex;
-use std::{net::SocketAddr, ops::RangeInclusive};
+use std::net::SocketAddr;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -24,9 +23,6 @@ pub struct Cli {
     /// Voltage buffer size as a power of 2
     #[arg(long, short, default_value_t = 22)]
     pub vbuf_power: u32,
-    /// CPU cores to which we'll build tasks. They should share a NUMA node.
-    #[arg(long, default_value = "8:15", value_parser = parse_core_range)]
-    pub core_range: RangeInclusive<usize>,
     /// Socket address of the SNAP Board
     #[arg(long, default_value = "192.168.0.5:69")]
     pub fpga_addr: SocketAddr,
@@ -57,22 +53,6 @@ pub enum Exfil {
         samples: usize,
     },
     Filterbank,
-}
-
-#[allow(clippy::missing_panics_doc)]
-#[allow(clippy::missing_errors_doc)]
-pub fn parse_core_range(input: &str) -> Result<RangeInclusive<usize>, String> {
-    let re = Regex::new(r"(\d+):(\d+)").unwrap();
-    let cap = re.captures(input).unwrap();
-    let start: usize = cap[1].parse().unwrap();
-    let stop: usize = cap[2].parse().unwrap();
-    if stop < start {
-        return Err("Invalid CPU range".to_owned());
-    }
-    if stop - start + 1 < 8 {
-        return Err("Not enough CPU cores".to_owned());
-    }
-    Ok(start..=stop)
 }
 
 fn valid_dada_key(s: &str) -> Result<i32, String> {

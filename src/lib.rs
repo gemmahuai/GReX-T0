@@ -1,7 +1,7 @@
 //! Seperate library crate so we can run benchmarks
 
 #![deny(clippy::all)]
-#![warn(clippy::pedantic)]
+//#![warn(clippy::pedantic)]
 
 pub mod args;
 pub mod capture;

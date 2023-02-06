@@ -1,38 +1,33 @@
 [package]
 name = "grex_t0"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 [dependencies]
 anyhow = "1"
-byte-slice-cast = "1"
 casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
 casperfpga_derive = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
 chrono = "0.4"
 clap = { version = "=4.0", features = ["derive"] }
 clap_lex = "=0.3.0"
-crossbeam = "0.8"
-crossterm = "0.25"
 fixed = "1.21.0"
 hdf5 = "0.8"
-hifitime = "3"
 http-body-util = "0.1.0-rc.2"
 hyper = { version = "1.0.0-rc.2", features = ["full"] }
-itertools = "0.10"
 lazy_static = "1.4"
-lending-iterator = "0.1"
 log = "0.4"
 prometheus = "0.13"
 ndarray = "0.15"
-nix = "0.26"
 num-complex = "0.4"
-polling = "2"
 pretty_env_logger = "0.4"
-psrdada = "0.2"
 regex = "1"
 rsntp = "3"
 socket2 = "0.4"
-tokio = { version = "^1.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "^1.0", features = ["macros", "rt-multi-thread", "net"] }
+thiserror = "1.0.38"
+thingbuf = "0.1.3"
+crossbeam-queue = "0.3.8"
+core_affinity = "0.8.0"
 
 [lib]
 name = "grex_t0"

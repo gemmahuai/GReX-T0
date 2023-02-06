@@ -71,6 +71,7 @@ fn main() -> anyhow::Result<()> {
             // Monitoring
             tokio::spawn(async move { monitoring::monitor_task(device).await });
             tokio::spawn(async move { monitoring::start_web_server(cli.metrics_port).await });
+            loop {}
             Ok(())
         })
     });

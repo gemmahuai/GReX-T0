@@ -71,8 +71,8 @@ pub async fn monitor_task(
     loop {
         // Blocking here is ok, these are infrequent events
         if let Some(stat) = stats.recv_ref().await {
-            PACKET_GAUGE.add(stat.processed.try_into().unwrap());
-            DROP_GAUGE.add(stat.drops.try_into().unwrap());
+            PACKET_GAUGE.set(stat.processed.try_into().unwrap());
+            DROP_GAUGE.set(stat.drops.try_into().unwrap());
         } else {
             // Channel closed
             break;

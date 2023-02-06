@@ -16,40 +16,60 @@ pub async fn downsample_task(
     downsample_power: u32,
 ) -> anyhow::Result<()> {
     info!("Starting downsample");
-    let mut avg_buf = vec![0f32; CHANNELS];
-    let mut avg_iters = 0;
-    let iters = 2usize.pow(downsample_power);
 
+    // We have two averaging states, one for the normal downsample process and one for monitoring
+    // They differ in that the standard "thru" connection is averaging by counts and the monitoing one is averaging by time
+    let downsamp_iters = 2usize.pow(downsample_power);
+    let mut downsamp_buf = vec![0f32; CHANNELS];
+    let mut local_downsamp_iters = 0;
+
+    // Here is the state for the monitoring part
     let mut last_monitor = Instant::now();
+    let mut monitor_buf = vec![0f32; CHANNELS];
+    let mut local_monitor_iters = 0;
 
     while let Some(payload) = receiver.recv_ref().await {
         // Compute Stokes I
         let stokes = payload.stokes_i();
-        // Add to averaging buf
-        avg_buf.iter_mut().zip(stokes).for_each(|(x, y)| *x += y);
-        avg_iters += 1;
-        if avg_iters == iters {
+        // Add to both averaging bufs
+        downsamp_buf
+            .iter_mut()
+            .zip(&*stokes)
+            .for_each(|(x, y)| *x += y);
+        monitor_buf
+            .iter_mut()
+            .zip(&*stokes)
+            .for_each(|(x, y)| *x += y);
+        // Increment the counts for both
+        local_downsamp_iters += 1;
+        local_monitor_iters += 1;
+
+        // Check for downsample exit condition
+        if local_downsamp_iters == downsamp_iters {
             // Get a handle on the sender
             let mut send_ref = sender.send_ref().await?;
             // Write averages directly into it
-            for (out_chan, avg_chan) in send_ref.iter_mut().zip(&avg_buf) {
-                *out_chan = avg_chan / iters as f32;
-            }
-            // Check the monitor send condition
-            if last_monitor.elapsed() >= MONITOR_CADENCE {
-                info!("Sending average spectrum");
-                // Get a handle on the monitor sender (but don't block)
-                if let Ok(mut mon_ref) = monitor.try_send_ref() {
-                    // Write averages from the sender directly into it
-                    for (out_chan, avgs) in mon_ref.iter_mut().zip(&*send_ref) {
-                        *out_chan = *avgs;
-                    }
-                }
-                last_monitor = Instant::now();
+            for (out_chan, avg_chan) in send_ref.iter_mut().zip(&downsamp_buf) {
+                *out_chan = avg_chan / local_downsamp_iters as f32;
             }
             // And reset averaging
-            avg_buf = vec![0f32; CHANNELS];
-            avg_iters = 0;
+            downsamp_buf = vec![0f32; CHANNELS];
+            local_downsamp_iters = 0;
+        }
+
+        // Check for monitor exit condition
+        if last_monitor.elapsed() >= MONITOR_CADENCE {
+            // Get a handle (non blocking) on the sender
+            if let Ok(mut send_ref) = monitor.try_send_ref() {
+                // And write averages
+                for (out_chan, avg_chan) in send_ref.iter_mut().zip(&monitor_buf) {
+                    *out_chan = avg_chan / local_monitor_iters as f32;
+                }
+            }
+            // Reset averaging and timers
+            last_monitor = Instant::now();
+            monitor_buf = vec![0f32; CHANNELS];
+            local_monitor_iters = 0;
         }
     }
     Ok(())

@@ -81,7 +81,6 @@ pub async fn monitor_task(
         //Then wait for spectrum
         if let Some(avg_spec) = avg.recv_ref().await.as_deref() {
             // Update channel data
-            info!("{:#?}", avg_spec);
             for (i, v) in avg_spec.iter().enumerate() {
                 SPECTRUM_GAUGE
                     .with_label_values(&[&i.to_string()])

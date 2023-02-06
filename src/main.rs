@@ -8,7 +8,7 @@ use grex_t0::{args, capture, dumps, exfil, fpga::Device, monitoring, processing}
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
 use thingbuf::mpsc::{channel, with_recycle};
-use tokio::{join, runtime, try_join};
+use tokio::{runtime, try_join};
 
 fn main() -> anyhow::Result<()> {
     // Enable tokio console

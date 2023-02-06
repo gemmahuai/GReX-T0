@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use thingbuf::mpsc::{Receiver, Sender};
 
 /// How long should the monitor integrations be?
-const MONITOR_INTEGRATION: Duration = Duration::from_secs(10);
+const MONITOR_CADENCE: Duration = Duration::from_secs(10);
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn downsample_task(
@@ -19,9 +19,9 @@ pub async fn downsample_task(
     let mut avg_buf = vec![0f32; CHANNELS];
     let mut avg_iters = 0;
     let iters = 2usize.pow(downsample_power);
-    let mut monitor_avgs = vec![0f32; CHANNELS];
-    let mut monitor_iters = 0;
+
     let mut last_monitor = Instant::now();
+
     while let Some(payload) = receiver.recv_ref().await {
         // Compute Stokes I
         let stokes = payload.stokes_i();
@@ -35,28 +35,20 @@ pub async fn downsample_task(
             for (out_chan, avg_chan) in send_ref.iter_mut().zip(&avg_buf) {
                 *out_chan = avg_chan / iters as f32;
             }
-            // Add these averages to the monitor averages
-            for (mon_chan, avg_chan) in monitor_avgs.iter_mut().zip(&avg_buf) {
-                *mon_chan += avg_chan;
-                monitor_iters += 1;
+            // Check the monitor send condition
+            if last_monitor.elapsed() >= MONITOR_CADENCE {
+                // Get a handle on the monitor sender (but don't block)
+                if let Ok(mut mon_ref) = monitor.try_send_ref() {
+                    // Write averages from the sender directly into it
+                    for (out_chan, avgs) in mon_ref.iter_mut().zip(&*send_ref) {
+                        *out_chan = *avgs;
+                    }
+                }
+                last_monitor = Instant::now();
             }
             // And reset averaging
             avg_buf = vec![0f32; CHANNELS];
             avg_iters = 0;
-            // Check the monitor send condition
-            if last_monitor.elapsed() >= MONITOR_INTEGRATION {
-                // Get a handle on the monitor sender (but don't block)
-                if let Ok(mut send_ref) = monitor.try_send_ref() {
-                    // Write averages directly into it
-                    for (out_chan, avg_chan) in send_ref.iter_mut().zip(&monitor_avgs) {
-                        *out_chan = avg_chan / monitor_iters as f32;
-                    }
-                }
-                // If we actually sent monitor info or not, reset it
-                monitor_avgs = vec![0f32; CHANNELS];
-                monitor_iters = 0;
-                last_monitor = Instant::now();
-            }
         }
     }
     Ok(())

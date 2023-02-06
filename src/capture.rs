@@ -3,7 +3,11 @@
 use crate::common::{Channel, Payload};
 use log::{error, info};
 use socket2::{Domain, Socket, Type};
-use std::{collections::HashMap, net::SocketAddr};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    time::{Duration, Instant},
+};
 use thingbuf::{
     mpsc::{Receiver, Sender},
     Recycle,
@@ -20,6 +24,8 @@ const SPECTRA_SIZE: usize = 8192;
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 /// Maximum number of payloads we want in the backlog
 const BACKLOG_BUFFER_PAYLOADS: usize = 1024;
+/// Polling interval for stats
+const STATS_POLL_DURATION: Duration = Duration::from_secs(10);
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
@@ -136,9 +142,22 @@ impl Capture {
 
     pub async fn start(
         &mut self,
-        payload_sender: &Sender<BoxedPayloadBytes, PayloadRecycle>,
+        payload_sender: Sender<BoxedPayloadBytes, PayloadRecycle>,
+        stats_send: Sender<Stats>,
+        stats_polling_time: Duration,
     ) -> anyhow::Result<()> {
+        let mut last_stats = Instant::now();
         loop {
+            // Send away the stats if the time has come (non blocking)
+            if last_stats.elapsed() >= stats_polling_time {
+                if let Ok(mut send) = stats_send.try_send_ref() {
+                    *send = Stats {
+                        drops: self.drops,
+                        processed: self.processed,
+                    };
+                }
+                last_stats = Instant::now();
+            }
             // Grab the next slot
             let mut slot = payload_sender.send_ref().await?;
             // By default, capture into the slot
@@ -179,13 +198,20 @@ fn count(pl: &PayloadBytes) -> Count {
     u64::from_be_bytes(pl[0..8].try_into().unwrap())
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct Stats {
+    pub drops: usize,
+    pub processed: usize,
+}
+
 pub async fn cap_task(
     port: u16,
     cap_send: Sender<BoxedPayloadBytes, PayloadRecycle>,
+    stats_send: Sender<Stats>,
 ) -> anyhow::Result<()> {
     info!("Starting capture task!");
     let mut cap = Capture::new(port).unwrap();
-    cap.start(&cap_send).await
+    cap.start(cap_send, stats_send, STATS_POLL_DURATION).await
 }
 
 // This task will decode incoming packets and send to the ringbuffer and downsample tasks

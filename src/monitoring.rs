@@ -1,3 +1,4 @@
+use crate::capture::Stats;
 use crate::fpga::Device;
 use http_body_util::Full;
 use hyper::body::Bytes;
@@ -16,6 +17,7 @@ use prometheus::{
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::time::Duration;
+use thingbuf::mpsc::Receiver;
 use tokio::net::TcpListener;
 
 lazy_static! {
@@ -60,12 +62,18 @@ pub async fn metrics(
     Ok(resp)
 }
 
-pub async fn monitor_task(device: Device) -> ! {
+pub async fn monitor_task(device: Device, stats: Receiver<Stats>) -> anyhow::Result<()> {
     info!("Starting monitoring task!");
     loop {
         tokio::time::sleep(Duration::from_secs(10)).await;
         // Blocking here is ok, these are infrequent events
-        //let stat = cap_stat_rcv.recv().unwrap();
+        if let Some(stat) = stats.recv_ref().await {
+            PACKET_GAUGE.add(stat.processed.try_into().unwrap());
+            DROP_GAUGE.add(stat.drops.try_into().unwrap());
+        } else {
+            // Channel closed
+            break;
+        }
 
         // Then wait for spectrum
         // if let Some(avg_spec) = spec_rcv.recv().await {
@@ -117,8 +125,6 @@ pub async fn monitor_task(device: Device) -> ! {
         }
 
         // Update metrics
-        //PACKET_GAUGE.add(stat.captured.try_into().unwrap());
-        //DROP_GAUGE.add(stat.dropped.try_into().unwrap());
         // CHANNEL_GAUGE
         //     .with_label_values(&["to_downsample"])
         //     .set(all_chans.to_downsample.len().try_into().unwrap());
@@ -132,6 +138,7 @@ pub async fn monitor_task(device: Device) -> ! {
         //     .with_label_values(&["to_sort"])
         //     .set(all_chans.to_sort.len().try_into().unwrap());
     }
+    Ok(())
 }
 
 pub async fn start_web_server(metrics_port: u16) -> anyhow::Result<()> {

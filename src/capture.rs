@@ -179,32 +179,31 @@ fn count(pl: &PayloadBytes) -> Count {
     u64::from_be_bytes(pl[0..8].try_into().unwrap())
 }
 
-#[allow(clippy::missing_panics_doc)]
 pub async fn cap_task(
     port: u16,
     cap_send: &Sender<BoxedPayloadBytes, PayloadRecycle>,
 ) -> anyhow::Result<()> {
     info!("Starting capture task!");
-    // We have to construct the capture on this thread because the CFFI stuff isn't thread-safe
     let mut cap = Capture::new(port).unwrap();
     cap.start(cap_send).await
 }
 
-#[allow(clippy::missing_panics_doc)]
 // This task will decode incoming packets and send to the ringbuffer and downsample tasks
 pub async fn decode_split_task(
     from_cap: Receiver<BoxedPayloadBytes, PayloadRecycle>,
     to_downsample: Sender<Payload>,
     to_dumps: Sender<Payload>,
 ) -> anyhow::Result<()> {
+    info!("Starting decode-split");
     // Receive
     while let Some(payload) = from_cap.recv_ref().await {
-        // Decode
-        let payload = Payload::from_bytes(&**payload);
-        // Send
-        to_downsample.send(payload).await?;
+        // Grab block
+        let mut send_ref = to_downsample.send_ref().await?;
+        // Decode directly into block
+        *send_ref = Payload::from_bytes(&**payload);
         // This one won't cause backpressure because that only will happen when we're doing IO
-        let _result = to_dumps.try_send(payload);
+        let _result = to_dumps.try_send(*send_ref);
+        // Lexical drop sends it away
     }
     Ok(())
 }

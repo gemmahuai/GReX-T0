@@ -27,6 +27,7 @@ const _LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
 /// Do nothing
 #[allow(clippy::missing_panics_doc)]
 pub async fn dummy_consumer(stokes_rcv: Receiver<Stokes>) {
+    println!("Starting dummy consumer");
     while stokes_rcv.recv().await.is_some() {}
 }
 

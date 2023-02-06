@@ -16,7 +16,7 @@ use grex_t0::{
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
 use thingbuf::mpsc::{channel, with_recycle};
-use tokio::runtime;
+use tokio::{join, runtime};
 
 fn main() -> anyhow::Result<()> {
     // Enable tokio console
@@ -43,7 +43,7 @@ fn main() -> anyhow::Result<()> {
     // Create a runtime for all the tasks
     let tasks = std::thread::spawn(move || -> anyhow::Result<()> {
         let rt = runtime::Builder::new_multi_thread()
-            .worker_threads(4)
+            .worker_threads(2)
             .enable_all()
             .build()?;
         rt.block_on(async {
@@ -52,23 +52,24 @@ fn main() -> anyhow::Result<()> {
             let (ex_s, ex_r) = channel(100);
             let (d_s, d_r) = channel(100);
             let (s_s, s_r) = channel(5);
-            // Decode split
-            tokio::spawn(async move { capture::decode_split_task(pb_r, ds_s, d_s).await });
-            // Downsample
-            tokio::spawn(async move {
-                processing::downsample_task(ds_r, ex_s, cli.downsample_power).await
-            });
-            // Monitoring
-            tokio::spawn(async move { monitoring::monitor_task(device).await });
-            tokio::spawn(async move { monitoring::start_web_server(cli.metrics_port).await });
-
-            // Dumps
-            tokio::spawn(
-                async move { dumps::dump_task(d_r, s_r, packet_start, cli.vbuf_power).await },
+            join!(
+                // Decode split
+                tokio::spawn(capture::decode_split_task(pb_r, ds_s, d_s)),
+                // Downsample
+                tokio::spawn(processing::downsample_task(
+                    ds_r,
+                    ex_s,
+                    cli.downsample_power
+                )),
+                // Monitoring
+                tokio::spawn(monitoring::monitor_task(device)),
+                tokio::spawn(monitoring::start_web_server(cli.metrics_port)),
+                // Dumps
+                tokio::spawn(dumps::dump_task(d_r, s_r, packet_start, cli.vbuf_power)),
+                tokio::spawn(dumps::trigger_task(s_s, cli.trig_port)),
+                // Exfil, awaiting this last task which will act as a sentinel to close everything
+                tokio::spawn(exfil::dummy_consumer(ex_r))
             );
-            tokio::spawn(async move { dumps::trigger_task(s_s, cli.trig_port).await });
-            // Exfil, awaiting this last task which will act as a sentinel to close everything
-            tokio::spawn(async move { exfil::dummy_consumer(ex_r).await }).await?;
             Ok(())
         })
     });

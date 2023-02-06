@@ -38,20 +38,43 @@ fn main() -> anyhow::Result<()> {
         device.force_pps();
     }
     // Create a dedicated single-threaded async runtime for the capture task
-    let (pb_s, pb_r) = with_recycle(32768, capture::PayloadRecycle::new());
+    let (pb_s, pb_r) = with_recycle(1024, capture::PayloadRecycle::new());
 
-    // Create a runtime for all the tasks
+    // Create channels to connect everything else
+    let (ds_s, ds_r) = channel(32768);
+    let (ex_s, ex_r) = channel(100);
+    let (d_s, d_r) = channel(100);
+    let (s_s, s_r) = channel(5);
+
+    // Create a runtime for some of the less critical tasks
     let tasks = std::thread::spawn(move || -> anyhow::Result<()> {
-        let rt = runtime::Builder::new_multi_thread()
-            .worker_threads(2)
+        let rt = runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
         rt.block_on(async {
-            // Create channels to connect everything
-            let (ds_s, ds_r) = channel(32768);
-            let (ex_s, ex_r) = channel(100);
-            let (d_s, d_r) = channel(100);
-            let (s_s, s_r) = channel(5);
+            if !core_affinity::set_for_current(CoreId { id: 10 }) {
+                bail!("Couldn't set core affinity on capture thread");
+            }
+            join!(
+                // Monitoring
+                tokio::spawn(monitoring::monitor_task(device)),
+                tokio::spawn(monitoring::start_web_server(cli.metrics_port)),
+                // Dumps
+                tokio::spawn(dumps::trigger_task(s_s, cli.trig_port)),
+            );
+            Ok(())
+        })
+    });
+
+    // Spawn the more timing critical tasks
+    let critical_tasks = std::thread::spawn(move || -> anyhow::Result<()> {
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        rt.block_on(async {
+            if !core_affinity::set_for_current(CoreId { id: 9 }) {
+                bail!("Couldn't set core affinity on capture thread");
+            }
             join!(
                 // Decode split
                 tokio::spawn(capture::decode_split_task(pb_r, ds_s, d_s)),
@@ -61,13 +84,9 @@ fn main() -> anyhow::Result<()> {
                     ex_s,
                     cli.downsample_power
                 )),
-                // Monitoring
-                tokio::spawn(monitoring::monitor_task(device)),
-                tokio::spawn(monitoring::start_web_server(cli.metrics_port)),
                 // Dumps
                 tokio::spawn(dumps::dump_task(d_r, s_r, packet_start, cli.vbuf_power)),
-                tokio::spawn(dumps::trigger_task(s_s, cli.trig_port)),
-                // Exfil, awaiting this last task which will act as a sentinel to close everything
+                // Exfil
                 tokio::spawn(exfil::dummy_consumer(ex_r))
             );
             Ok(())
@@ -75,7 +94,6 @@ fn main() -> anyhow::Result<()> {
     });
 
     std::thread::spawn(move || -> anyhow::Result<()> {
-        // Bind this thread to a core
         if !core_affinity::set_for_current(CoreId { id: 8 }) {
             bail!("Couldn't set core affinity on capture thread");
         }

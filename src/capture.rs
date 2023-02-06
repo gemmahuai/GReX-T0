@@ -158,7 +158,6 @@ impl Capture {
             // Send away the stats if the time has come (non blocking)
             if last_stats.elapsed() >= stats_polling_time {
                 if let Ok(mut send) = stats_send.try_send_ref() {
-                    println!("Sending stats");
                     *send = Stats {
                         drops: self.drops,
                         processed: self.processed,

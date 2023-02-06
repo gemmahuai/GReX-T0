@@ -112,15 +112,7 @@ fn main() -> anyhow::Result<()> {
             let rt = runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
-            rt.block_on(async {
-                let _ = join!(
-                    // Capure
-                    tokio::task::Builder::new()
-                        .name("capture")
-                        .spawn(capture::cap_task(cli.cap_port, pb_s, stat_s))?,
-                );
-                Ok(())
-            })
+            rt.block_on(async move { capture::cap_task(cli.cap_port, pb_s, stat_s).await })
         })?;
 
     monitoring_tasks.join().unwrap().unwrap();

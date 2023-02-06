@@ -50,7 +50,6 @@ harness = false
 
 [profile.release]
 debug = 1
-lto = "thin"
 panic = "abort"
 
 [dev-dependencies]

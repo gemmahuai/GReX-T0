@@ -1,4 +1,5 @@
 use crate::common::Stokes;
+use log::info;
 use thingbuf::mpsc::Receiver;
 //use byte_slice_cast::AsByteSlice;
 //use chrono::{DateTime, Datelike, Timelike, Utc};
@@ -27,7 +28,7 @@ const _LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
 /// Do nothing
 #[allow(clippy::missing_panics_doc)]
 pub async fn dummy_consumer(stokes_rcv: Receiver<Stokes>) {
-    println!("Starting dummy consumer");
+    info!("Starting dummy consumer");
     while stokes_rcv.recv().await.is_some() {}
 }
 

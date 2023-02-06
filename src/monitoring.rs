@@ -16,7 +16,6 @@ use prometheus::{
 };
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::time::Duration;
 use thingbuf::mpsc::Receiver;
 use tokio::net::TcpListener;
 
@@ -65,7 +64,6 @@ pub async fn metrics(
 pub async fn monitor_task(device: Device, stats: Receiver<Stats>) -> anyhow::Result<()> {
     info!("Starting monitoring task!");
     loop {
-        tokio::time::sleep(Duration::from_secs(10)).await;
         // Blocking here is ok, these are infrequent events
         if let Some(stat) = stats.recv_ref().await {
             PACKET_GAUGE.add(stat.processed.try_into().unwrap());

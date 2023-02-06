@@ -148,16 +148,6 @@ impl Capture {
     ) -> anyhow::Result<()> {
         let mut last_stats = Instant::now();
         loop {
-            // Send away the stats if the time has come (non blocking)
-            if last_stats.elapsed() >= stats_polling_time {
-                if let Ok(mut send) = stats_send.try_send_ref() {
-                    *send = Stats {
-                        drops: self.drops,
-                        processed: self.processed,
-                    };
-                }
-                last_stats = Instant::now();
-            }
             // Grab the next slot
             let mut slot = payload_sender.send_ref().await?;
             // By default, capture into the slot
@@ -165,6 +155,17 @@ impl Capture {
             self.processed += 1;
             // Then, we get the count
             let this_count = count(&*slot);
+            // Send away the stats if the time has come (non blocking)
+            if last_stats.elapsed() >= stats_polling_time {
+                if let Ok(mut send) = stats_send.try_send_ref() {
+                    println!("Sending stats");
+                    *send = Stats {
+                        drops: self.drops,
+                        processed: self.processed,
+                    };
+                }
+                last_stats = Instant::now();
+            }
             // Check first payload
             if self.first_payload {
                 self.first_payload = false;

@@ -49,6 +49,10 @@ fn main() -> anyhow::Result<()> {
         Ok(())
     });
 
+    // Bind this thread to a core
+    if !core_affinity::set_for_current(CoreId { id: 9 }) {
+        bail!("Couldn't set core affinity on capture thread");
+    }
     // Then create a multi-threaded async runtime for everything else
     let rt = runtime::Builder::new_current_thread()
         .enable_all()

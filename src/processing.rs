@@ -60,12 +60,12 @@ pub async fn downsample_task(
         // Check for monitor exit condition
         if last_monitor.elapsed() >= MONITOR_CADENCE {
             // Get a handle (non blocking) on the sender
-            let mut send_ref = monitor.send_ref().await?;
-            // And write averages
-            for (out_chan, avg_chan) in send_ref.iter_mut().zip(&monitor_buf) {
-                *out_chan = avg_chan / local_monitor_iters as f32;
+            if let Ok(mut send_ref) = monitor.try_send_ref() {
+                // And write averages
+                for (out_chan, avg_chan) in send_ref.iter_mut().zip(&monitor_buf) {
+                    *out_chan = avg_chan / local_monitor_iters as f32;
+                }
             }
-
             // Reset averaging and timers
             last_monitor = Instant::now();
             monitor_buf = vec![0f32; CHANNELS];

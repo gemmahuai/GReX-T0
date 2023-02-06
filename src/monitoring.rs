@@ -1,4 +1,5 @@
 use crate::capture::Stats;
+use crate::common::Stokes;
 use crate::fpga::Device;
 use http_body_util::Full;
 use hyper::body::Bytes;
@@ -61,7 +62,11 @@ pub async fn metrics(
     Ok(resp)
 }
 
-pub async fn monitor_task(device: Device, stats: Receiver<Stats>) -> anyhow::Result<()> {
+pub async fn monitor_task(
+    device: Device,
+    stats: Receiver<Stats>,
+    avg: Receiver<Stokes>,
+) -> anyhow::Result<()> {
     info!("Starting monitoring task!");
     loop {
         // Blocking here is ok, these are infrequent events
@@ -73,15 +78,15 @@ pub async fn monitor_task(device: Device, stats: Receiver<Stats>) -> anyhow::Res
             break;
         }
 
-        // Then wait for spectrum
-        // if let Some(avg_spec) = spec_rcv.recv().await {
-        //     // Update channel data
-        //     for (i, v) in avg_spec.into_iter().enumerate() {
-        //         SPECTRUM_GAUGE
-        //             .with_label_values(&[&i.to_string()])
-        //             .set(f64::from(v));
-        //     }
-        // }
+        //Then wait for spectrum
+        if let Some(avg_spec) = avg.recv_ref().await {
+            // Update channel data
+            for (i, v) in avg_spec.iter().enumerate() {
+                SPECTRUM_GAUGE
+                    .with_label_values(&[&i.to_string()])
+                    .set(f64::from(*v));
+            }
+        }
 
         // Metrics from the FPGA
         if let Ok(v) = device.fpga.fft_overflow_cnt.read() {

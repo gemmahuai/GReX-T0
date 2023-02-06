@@ -38,6 +38,7 @@ fn main() -> anyhow::Result<()> {
     let (dump_s, dump_r) = channel(100);
     let (trig_s, trig_r) = channel(5);
     let (stat_s, stat_r) = channel(5);
+    let (avg_s, avg_r) = channel(100);
 
     // Create a runtime for some of the less critical tasks
     let monitoring_tasks = std::thread::Builder::new()
@@ -54,7 +55,7 @@ fn main() -> anyhow::Result<()> {
                     // Monitoring
                     tokio::task::Builder::new()
                         .name("monitor_collect")
-                        .spawn(monitoring::monitor_task(device, stat_r))?,
+                        .spawn(monitoring::monitor_task(device, stat_r, avg_r))?,
                     tokio::task::Builder::new()
                         .name("web_server")
                         .spawn(monitoring::start_web_server(cli.metrics_port))?,
@@ -68,39 +69,42 @@ fn main() -> anyhow::Result<()> {
         })?;
 
     // Spawn the more timing critical tasks
-    let critical_tasks =
-        std::thread::Builder::new()
-            .name("processing".to_string())
-            .spawn(move || -> anyhow::Result<()> {
-                if !core_affinity::set_for_current(CoreId { id: 9 }) {
-                    bail!("Couldn't set core affinity on capture thread");
-                }
-                let rt = runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()?;
-                rt.block_on(async {
-                    let (_, _, _, _) =
-                        try_join!(
-                            // Decode split
-                            tokio::task::Builder::new()
-                                .name("decode_split")
-                                .spawn(capture::decode_split_task(pb_r, ds_s, dump_s))?,
-                            // Downsample
-                            tokio::task::Builder::new().name("downsample").spawn(
-                                processing::downsample_task(ds_r, ex_s, cli.downsample_power)
-                            )?,
-                            // Dumps
-                            tokio::task::Builder::new().name("dump_fill").spawn(
-                                dumps::dump_task(dump_r, trig_r, packet_start, cli.vbuf_power)
-                            )?,
-                            // Exfil
-                            tokio::task::Builder::new()
-                                .name("exfil")
-                                .spawn(exfil::dummy_consumer(ex_r))?
-                        )?;
-                    Ok(())
-                })
-            })?;
+    let critical_tasks = std::thread::Builder::new()
+        .name("processing".to_string())
+        .spawn(move || -> anyhow::Result<()> {
+            if !core_affinity::set_for_current(CoreId { id: 9 }) {
+                bail!("Couldn't set core affinity on capture thread");
+            }
+            let rt = runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            rt.block_on(async {
+                let (_, _, _, _) = try_join!(
+                    // Decode split
+                    tokio::task::Builder::new()
+                        .name("decode_split")
+                        .spawn(capture::decode_split_task(pb_r, ds_s, dump_s))?,
+                    // Downsample
+                    tokio::task::Builder::new().name("downsample").spawn(
+                        processing::downsample_task(ds_r, ex_s, avg_s, cli.downsample_power)
+                    )?,
+                    // Dumps
+                    tokio::task::Builder::new()
+                        .name("dump_fill")
+                        .spawn(dumps::dump_task(
+                            dump_r,
+                            trig_r,
+                            packet_start,
+                            cli.vbuf_power
+                        ))?,
+                    // Exfil
+                    tokio::task::Builder::new()
+                        .name("exfil")
+                        .spawn(exfil::dummy_consumer(ex_r))?
+                )?;
+                Ok(())
+            })
+        })?;
 
     // And then finally the capture task
     let capture_task = std::thread::Builder::new()

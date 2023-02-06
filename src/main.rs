@@ -48,7 +48,7 @@ fn main() -> anyhow::Result<()> {
             .build()?;
         rt.block_on(async {
             // Create channels to connect everything
-            let (ds_s, ds_r) = channel(100);
+            let (ds_s, ds_r) = channel(32768);
             let (ex_s, ex_r) = channel(100);
             let (d_s, d_r) = channel(100);
             let (s_s, s_r) = channel(5);

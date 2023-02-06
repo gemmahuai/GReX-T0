@@ -147,10 +147,10 @@ impl Capture {
         stats_polling_time: Duration,
     ) -> anyhow::Result<()> {
         let mut last_stats = Instant::now();
-        let mut count = 0;
+        let mut plcount = 0;
         loop {
-            println!("{count}");
-            count += 1;
+            println!("{plcount}");
+            plcount += 1;
             // Grab the next slot
             let mut slot = payload_sender.send_ref().await?;
             // By default, capture into the slot

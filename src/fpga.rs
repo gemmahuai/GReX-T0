@@ -10,7 +10,7 @@ use fixed::types::U32F0;
 use rsntp::SynchronizationResult;
 use std::net::SocketAddr;
 
-fpga_from_fpg!(GrexFpga, "gateware/grex_gateware_2022-11-09_2251.fpg");
+fpga_from_fpg!(GrexFpga, "gateware/grex_gateware_2023-02-06_1503.fpg");
 
 pub struct Device {
     pub fpga: GrexFpga<Tapcp>,

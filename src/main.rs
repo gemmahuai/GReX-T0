@@ -8,7 +8,7 @@ use grex_t0::{args, capture, dumps, exfil, fpga::Device, monitoring, processing}
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
 use thingbuf::mpsc::{channel, with_recycle};
-use tokio::{join, runtime};
+use tokio::{join, runtime, try_join};
 
 fn main() -> anyhow::Result<()> {
     // Enable tokio console
@@ -50,7 +50,7 @@ fn main() -> anyhow::Result<()> {
                 .enable_all()
                 .build()?;
             rt.block_on(async {
-                let (_, _, _) = join!(
+                let (_, _, _) = try_join!(
                     // Monitoring
                     tokio::task::Builder::new()
                         .name("monitor_collect")
@@ -62,7 +62,7 @@ fn main() -> anyhow::Result<()> {
                     tokio::task::Builder::new()
                         .name("dump_trigger")
                         .spawn(dumps::trigger_task(trig_s, cli.trig_port))?,
-                );
+                )?;
                 Ok(())
             })
         })?;
@@ -80,7 +80,7 @@ fn main() -> anyhow::Result<()> {
                     .build()?;
                 rt.block_on(async {
                     let (_, _, _, _) =
-                        join!(
+                        try_join!(
                             // Decode split
                             tokio::task::Builder::new()
                                 .name("decode_split")
@@ -97,7 +97,7 @@ fn main() -> anyhow::Result<()> {
                             tokio::task::Builder::new()
                                 .name("exfil")
                                 .spawn(exfil::dummy_consumer(ex_r))?
-                        );
+                        )?;
                     Ok(())
                 })
             })?;

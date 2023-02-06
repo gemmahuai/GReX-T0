@@ -148,6 +148,7 @@ impl Capture {
     ) -> anyhow::Result<()> {
         let mut last_stats = Instant::now();
         loop {
+            println!("Buh?");
             // Grab the next slot
             let mut slot = payload_sender.send_ref().await?;
             // By default, capture into the slot

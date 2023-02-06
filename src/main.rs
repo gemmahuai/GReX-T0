@@ -46,7 +46,8 @@ fn main() -> anyhow::Result<()> {
     }
     // Create a runtime for all the tasks
     let tasks = std::thread::spawn(move || -> anyhow::Result<()> {
-        let rt = runtime::Builder::new_current_thread()
+        let rt = runtime::Builder::new_multi_thread()
+            .worker_threads(3)
             .enable_all()
             .build()?;
         rt.block_on(async {

@@ -28,6 +28,7 @@ tokio = { version = "^1.0", features = [
     "rt-multi-thread",
     "net",
     "time",
+    "tracing",
 ] }
 thiserror = "1.0.38"
 thingbuf = "0.1.3"

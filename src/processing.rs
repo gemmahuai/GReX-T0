@@ -49,9 +49,10 @@ pub async fn downsample_task(
             // Get a handle on the sender
             let mut send_ref = sender.send_ref().await?;
             // Write averages directly into it
-            for (out_chan, avg_chan) in send_ref.iter_mut().zip(&downsamp_buf) {
-                *out_chan = avg_chan / local_downsamp_iters as f32;
-            }
+            downsamp_buf
+                .iter_mut()
+                .for_each(|v| *v /= local_downsamp_iters as f32);
+            send_ref.clone_from(&downsamp_buf);
             // And reset averaging
             downsamp_buf = vec![0f32; CHANNELS];
             local_downsamp_iters = 0;
@@ -62,9 +63,10 @@ pub async fn downsample_task(
             // Get a handle (non blocking) on the sender
             if let Ok(mut send_ref) = monitor.try_send_ref() {
                 // And write averages
-                for (out_chan, avg_chan) in send_ref.iter_mut().zip(&monitor_buf) {
-                    *out_chan = avg_chan / local_monitor_iters as f32;
-                }
+                monitor_buf
+                    .iter_mut()
+                    .for_each(|v| *v /= local_monitor_iters as f32);
+                send_ref.clone_from(&monitor_buf);
             }
             // Reset averaging and timers
             last_monitor = Instant::now();

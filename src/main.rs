@@ -79,8 +79,12 @@ fn main() -> anyhow::Result<()> {
                     .enable_all()
                     .build()?;
                 rt.block_on(async {
-                    let (_, _, _) =
+                    let (_, _, _, _) =
                         join!(
+                            // Decode split
+                            tokio::task::Builder::new()
+                                .name("decode_split")
+                                .spawn(capture::decode_split_task(pb_r, ds_s, dump_s))?,
                             // Downsample
                             tokio::task::Builder::new().name("downsample").spawn(
                                 processing::downsample_task(ds_r, ex_s, cli.downsample_power)
@@ -109,15 +113,11 @@ fn main() -> anyhow::Result<()> {
                 .enable_all()
                 .build()?;
             rt.block_on(async {
-                let (_, _) = join!(
+                let _ = join!(
                     // Capure
                     tokio::task::Builder::new()
                         .name("capture")
                         .spawn(capture::cap_task(cli.cap_port, pb_s, stat_s))?,
-                    // Decode split
-                    tokio::task::Builder::new()
-                        .name("decode_split")
-                        .spawn(capture::decode_split_task(pb_r, ds_s, dump_s))?,
                 );
                 Ok(())
             })

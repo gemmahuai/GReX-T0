@@ -50,7 +50,9 @@ fn main() -> anyhow::Result<()> {
     });
 
     // Then create a multi-threaded async runtime for everything else
-    let rt = runtime::Runtime::new()?;
+    let rt = runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
     rt.block_on(async {
         // Create channels to connect everything
         let (ds_s, ds_r) = channel(100);

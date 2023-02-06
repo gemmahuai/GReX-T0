@@ -181,11 +181,11 @@ fn count(pl: &PayloadBytes) -> Count {
 
 pub async fn cap_task(
     port: u16,
-    cap_send: &Sender<BoxedPayloadBytes, PayloadRecycle>,
+    cap_send: Sender<BoxedPayloadBytes, PayloadRecycle>,
 ) -> anyhow::Result<()> {
     info!("Starting capture task!");
     let mut cap = Capture::new(port).unwrap();
-    cap.start(cap_send).await
+    cap.start(&cap_send).await
 }
 
 // This task will decode incoming packets and send to the ringbuffer and downsample tasks

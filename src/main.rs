@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
     let (pb_s, pb_r) = with_recycle(1024, capture::PayloadRecycle::new());
 
     // Create channels to connect everything else
-    let (ds_s, ds_r) = channel(32768);
+    let (ds_s, ds_r) = channel(1024);
     let (ex_s, ex_r) = channel(100);
     let (d_s, d_r) = channel(100);
     let (s_s, s_r) = channel(5);
@@ -50,13 +50,13 @@ fn main() -> anyhow::Result<()> {
     let monitoring_tasks = std::thread::Builder::new()
         .name("monitoring".to_string())
         .spawn(move || -> anyhow::Result<()> {
+            if !core_affinity::set_for_current(CoreId { id: 10 }) {
+                bail!("Couldn't set core affinity on capture thread");
+            }
             let rt = runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
             rt.block_on(async {
-                if !core_affinity::set_for_current(CoreId { id: 10 }) {
-                    bail!("Couldn't set core affinity on capture thread");
-                }
                 join!(
                     // Monitoring
                     tokio::task::Builder::new()
@@ -78,18 +78,14 @@ fn main() -> anyhow::Result<()> {
     let critical_tasks = std::thread::Builder::new()
         .name("processing".to_string())
         .spawn(move || -> anyhow::Result<()> {
+            if !core_affinity::set_for_current(CoreId { id: 9 }) {
+                bail!("Couldn't set core affinity on capture thread");
+            }
             let rt = runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
             rt.block_on(async {
-                if !core_affinity::set_for_current(CoreId { id: 9 }) {
-                    bail!("Couldn't set core affinity on capture thread");
-                }
                 join!(
-                    // Decode split
-                    tokio::task::Builder::new()
-                        .name("decode_split")
-                        .spawn(capture::decode_split_task(pb_r, ds_s, d_s))?,
                     // Downsample
                     tokio::task::Builder::new().name("downsample").spawn(
                         processing::downsample_task(ds_r, ex_s, cli.downsample_power)
@@ -116,8 +112,19 @@ fn main() -> anyhow::Result<()> {
             let rt = runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?;
-            rt.block_on(async { capture::cap_task(cli.cap_port, &pb_s).await })?;
-            Ok(())
+            rt.block_on(async {
+                join!(
+                    // Capure
+                    tokio::task::Builder::new()
+                        .name("capture")
+                        .spawn(capture::cap_task(cli.cap_port, pb_s))?,
+                    // Decode split
+                    tokio::task::Builder::new()
+                        .name("decode_split")
+                        .spawn(capture::decode_split_task(pb_r, ds_s, d_s))?,
+                );
+                Ok(())
+            })
         })?;
 
     monitoring_tasks.join().unwrap().unwrap();

@@ -61,17 +61,17 @@ fn main() -> anyhow::Result<()> {
             tokio::spawn(async move {
                 processing::downsample_task(ds_r, ex_s, cli.downsample_power).await
             });
-            // Exfil
-            tokio::spawn(async move { exfil::dummy_consumer(ex_r).await });
+            // Monitoring
+            tokio::spawn(async move { monitoring::monitor_task(device).await });
+            tokio::spawn(async move { monitoring::start_web_server(cli.metrics_port).await });
+
             // Dumps
             tokio::spawn(
                 async move { dumps::dump_task(d_r, s_r, packet_start, cli.vbuf_power).await },
             );
             tokio::spawn(async move { dumps::trigger_task(s_s, cli.trig_port).await });
-            // Monitoring
-            tokio::spawn(async move { monitoring::monitor_task(device).await });
-            tokio::spawn(async move { monitoring::start_web_server(cli.metrics_port).await });
-            loop {}
+            // Exfil, awaiting this last task which will act as a sentinel to close everything
+            tokio::spawn(async move { exfil::dummy_consumer(ex_r).await }).await?;
             Ok(())
         })
     });

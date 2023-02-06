@@ -42,7 +42,9 @@ fn main() -> anyhow::Result<()> {
         if !core_affinity::set_for_current(CoreId { id: 8 }) {
             bail!("Couldn't set core affinity on capture thread");
         }
-        let rt = runtime::Builder::new_current_thread().build()?;
+        let rt = runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
         rt.block_on(async { capture::cap_task(cli.cap_port, &pb_s).await })?;
         Ok(())
     });

@@ -35,16 +35,14 @@ fn main() -> anyhow::Result<()> {
     if cli.trig {
         device.force_pps();
     }
-    // Create a dedicated single-threaded async runtime for the capture task
-    let (pb_s, pb_r) = with_recycle(1024, capture::PayloadRecycle::new());
 
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
-
     // Create channels to connect everything else
-    let (ds_s, ds_r) = channel(32768);
+    let (pb_s, pb_r) = with_recycle(16384, capture::PayloadRecycle::new());
+    let (ds_s, ds_r) = channel(16384);
     let (ex_s, ex_r) = channel(100);
-    let (dump_s, dump_r) = channel(100);
+    let (dump_s, dump_r) = channel(16384);
     let (trig_s, trig_r) = channel(5);
     let (stat_s, stat_r) = channel(100);
     let (avg_s, avg_r) = channel(100);

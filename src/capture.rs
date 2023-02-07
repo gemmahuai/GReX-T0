@@ -79,6 +79,12 @@ impl PayloadRecycle {
     }
 }
 
+impl Default for PayloadRecycle {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl Recycle<BoxedPayloadBytes> for PayloadRecycle {
     fn new_element(&self) -> BoxedPayloadBytes {
         Box::new([0u8; PAYLOAD_SIZE])

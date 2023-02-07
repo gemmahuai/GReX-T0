@@ -13,8 +13,24 @@ use grex_t0::{
 };
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
-use thingbuf::mpsc::{channel, with_recycle};
+use thingbuf::{
+    mpsc::{with_recycle, Receiver, Sender},
+    Recycle,
+};
 use tokio::{runtime, try_join};
+
+fn warm_channel<T, R>(capacity: usize) -> (Sender<T, R>, Receiver<T, R>)
+where
+    T: Clone,
+    R: Recycle<T> + Default,
+{
+    let (s, r) = with_recycle(capacity, R::default());
+    for _ in 0..capacity {
+        let _ = s.try_send_ref();
+        let _ = r.try_recv_ref();
+    }
+    (s, r)
+}
 
 fn main() -> anyhow::Result<()> {
     // Enable tokio console
@@ -39,13 +55,13 @@ fn main() -> anyhow::Result<()> {
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
     // Create channels to connect everything else
-    let (pb_s, pb_r) = with_recycle(16384, capture::PayloadRecycle::new());
-    let (ds_s, ds_r) = channel(16384);
-    let (ex_s, ex_r) = channel(100);
-    let (dump_s, dump_r) = channel(16384);
-    let (trig_s, trig_r) = channel(5);
-    let (stat_s, stat_r) = channel(100);
-    let (avg_s, avg_r) = channel(100);
+    let (pb_s, pb_r) = warm_channel(16384);
+    let (ds_s, ds_r) = warm_channel(16384);
+    let (ex_s, ex_r) = warm_channel(100);
+    let (dump_s, dump_r) = warm_channel(16384);
+    let (trig_s, trig_r) = warm_channel(5);
+    let (stat_s, stat_r) = warm_channel(100);
+    let (avg_s, avg_r) = warm_channel(100);
 
     // Create a runtime for some of the less critical tasks
     let monitoring_tasks = std::thread::Builder::new()

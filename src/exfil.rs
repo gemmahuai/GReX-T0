@@ -1,29 +1,29 @@
-use crate::common::Stokes;
-use log::info;
+use crate::common::{Stokes, CHANNELS, PACKET_CADENCE};
+use byte_slice_cast::AsByteSlice;
+use chrono::{DateTime, Datelike, Timelike, Utc};
+use lending_iterator::lending_iterator::LendingIterator;
+use log::{debug, info};
+use psrdada::client::DadaClient;
+use std::sync::{Arc, Mutex};
+use std::{collections::HashMap, io::Write};
 use thingbuf::mpsc::Receiver;
-//use byte_slice_cast::AsByteSlice;
-//use chrono::{DateTime, Datelike, Timelike, Utc};
-// use lending_iterator::lending_iterator::LendingIterator;
-// use log::{debug, info};
-// use psrdada::client::DadaClient;
-// use std::{collections::HashMap, io::Write};
 
 // Set by hardware (in MHz)
 const _LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
-//const BANDWIDTH: f64 = 250.0;
+const BANDWIDTH: f64 = 250.0;
 
 /// Convert a chronno `DateTime` into a heimdall-compatible timestamp string
-// fn heimdall_timestamp(time: &DateTime<Utc>) -> String {
-//     format!(
-//         "{}-{:02}-{:02}-{:02}:{:02}:{:02}",
-//         time.year(),
-//         time.month(),
-//         time.day(),
-//         time.hour(),
-//         time.minute(),
-//         time.second()
-//     )
-// }
+fn heimdall_timestamp(time: &DateTime<Utc>) -> String {
+    format!(
+        "{}-{:02}-{:02}-{:02}:{:02}:{:02}",
+        time.year(),
+        time.month(),
+        time.day(),
+        time.hour(),
+        time.minute(),
+        time.second()
+    )
+}
 
 /// Do nothing
 #[allow(clippy::missing_panics_doc)]
@@ -33,13 +33,12 @@ pub async fn dummy_consumer(stokes_rcv: Receiver<Stokes>) {
 }
 
 // FIXME
-// #[allow(clippy::missing_panics_doc)]
-// pub fn dada_consumer(
+// pub async fn dada_consumer(
 //     key: i32,
-//     stokes_rcv: &Receiver<Vec<Stokes>>,
-//     payload_start: &DateTime<Utc>,
+//     stokes_rcv: Receiver<Stokes>,
+//     payload_start: DateTime<Utc>,
 //     window_size: usize,
-// ) {
+// ) -> anyhow::Result<()> {
 //     // DADA window
 //     let mut stokes_cnt = 0usize;
 //     // We will capture the timestamp on the first packet
@@ -52,7 +51,7 @@ pub async fn dummy_consumer(stokes_rcv: Receiver<Stokes>) {
 //         ("NPOL".to_owned(), "1".to_owned()),
 //         ("NBIT".to_owned(), "32".to_owned()),
 //         ("OBS_OFFSET".to_owned(), 0.to_string()),
-//         ("TSAMP".to_owned(), (PACKET_CADENCE * 1e6).to_string()),
+//         ("TSAMP".to_owned(), (PACKET_CADENCE * 1e6).to_string()), // FIXME, downsample?
 //     ]);
 //     // Grab PSRDADA writing context
 //     let mut client = DadaClient::new(key).expect("Could not connect to PSRDADA buffer");
@@ -62,10 +61,10 @@ pub async fn dummy_consumer(stokes_rcv: Receiver<Stokes>) {
 //     // Start the main consumer loop
 //     loop {
 //         // Grab the next psrdada block we can write to (BLOCKING)
-//         let mut block = data_writer.next().unwrap();
+//         let mut block = tokio::task::spawn_blocking(move || data_writer.next()).await?;
 //         loop {
 //             // Grab the next stokes parameters (already downsampled)
-//             let mut stokes = stokes_rcv.recv().unwrap();
+//             let mut stokes = stokes_rcv.recv().await?;
 //             // Timestamp first one
 //             if first_payload {
 //                 first_payload = false;

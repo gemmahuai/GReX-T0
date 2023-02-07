@@ -21,7 +21,7 @@ pub struct Cli {
     #[arg(long, short, default_value_t = 2)]
     pub downsample_power: u32,
     /// Voltage buffer size as a power of 2
-    #[arg(long, short, default_value_t = 22)]
+    #[arg(long, short, default_value_t = 15)]
     pub vbuf_power: u32,
     /// Socket address of the SNAP Board
     #[arg(long, default_value = "192.168.0.5:69")]

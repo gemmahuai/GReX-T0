@@ -2,7 +2,6 @@
 
 use crate::common::{Payload, CHANNELS};
 use chrono::{DateTime, Utc};
-use crossbeam_queue::ArrayQueue;
 use hdf5::File;
 use log::{info, warn};
 use std::net::SocketAddr;
@@ -10,23 +9,27 @@ use thingbuf::mpsc::{Receiver, Sender};
 use tokio::net::UdpSocket;
 
 pub struct DumpRing {
-    container: ArrayQueue<Payload>,
+    capacity: usize,
+    container: Vec<Payload>,
+    write_index: usize,
 }
 
 impl DumpRing {
-    #[must_use]
-    pub fn new(size: usize) -> Self {
+    pub fn push(&mut self, value: Payload) {
+        self.container[self.write_index] = value;
+        self.write_index = (self.write_index + 1) & (self.capacity - 1);
+    }
+
+    pub fn new(size_power: u32) -> Self {
+        let cap = 2usize.pow(size_power);
         Self {
-            container: ArrayQueue::new(size),
+            container: vec![Payload::default(); cap],
+            write_index: 0,
+            capacity: cap,
         }
     }
 
-    pub fn push(&mut self, payload: Payload) {
-        self.container.force_push(payload);
-    }
-
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
-    #[allow(clippy::missing_errors_doc)]
     pub fn dump(&self, start_time: &DateTime<Utc>) -> anyhow::Result<()> {
         // Filename with ISO 8610 standard format
         let filename = format!("grex_dump-{}.h5", Utc::now().format("%Y%m%dT%H%M%S"));
@@ -39,10 +42,18 @@ impl DumpRing {
         // And then write in chunks, draining the buffer
         let mut idx = 0;
         let mut payload_time = *start_time;
-        while let Some(pl) = self.container.pop() {
+        let mut read_idx = self.write_index;
+        loop {
+            let pl = self.container[read_idx];
             ds.write_slice(&pl.into_ndarray(), (idx, .., .., ..))?;
             payload_time = pl.real_time(start_time);
             idx += 1;
+            // Increment read_index, mod the size
+            read_idx = (read_idx + 1) & (self.capacity - 1);
+            // Check if we've gone all the way around
+            if read_idx == self.write_index {
+                break;
+            }
         }
         // Set the time attribute
         let attr = ds.new_attr::<i64>().create("timestamp")?;
@@ -74,7 +85,7 @@ pub async fn dump_task(
 ) -> anyhow::Result<()> {
     info!("Starting voltage ringbuffer fill task!");
     // Create the ring buffer to store voltage dumps
-    let mut ring = DumpRing::new(2usize.pow(vbuf_power));
+    let mut ring = DumpRing::new(vbuf_power);
     loop {
         // First check if we need to dump, as that takes priority
         if signal_reciever.try_recv().is_ok() {

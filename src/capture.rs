@@ -254,11 +254,13 @@ pub async fn decode_split_task(
     // Receive
     while let Some(payload) = from_cap.recv_ref().await {
         // Grab block
-        let mut send_ref = to_downsample.send_ref().await?;
+        let mut downsamp_ref = to_downsample.send_ref().await?;
         // Decode directly into block
-        *send_ref = Payload::from_bytes(&**payload);
+        *downsamp_ref = Payload::from_bytes(&**payload);
         // This one won't cause backpressure because that only will happen when we're doing IO
-        let _result = to_dumps.try_send(*send_ref);
+        if let Ok(mut dump_ref) = to_dumps.try_send_ref() {
+            dump_ref.clone_from(&*downsamp_ref);
+        }
         // Lexical drop sends it away
     }
     Ok(())

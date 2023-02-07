@@ -123,7 +123,7 @@ impl Capture {
         let sock = UdpSocket::from_std(socket.into())?;
         Ok(Self {
             sock,
-            backlog: HashMap::with_capacity(BACKLOG_BUFFER_PAYLOADS),
+            backlog: HashMap::with_capacity(BACKLOG_BUFFER_PAYLOADS * 2),
             drops: 0,
             processed: 0,
             first_payload: true,
@@ -147,9 +147,14 @@ impl Capture {
         stats_polling_time: Duration,
     ) -> anyhow::Result<()> {
         let mut last_stats = Instant::now();
+        let mut need_new_slot = false;
+        let mut slot = payload_sender.send_ref().await?;
         loop {
-            // Grab the next slot
-            let mut slot = payload_sender.send_ref().await?;
+            // Grab the next slot (conditionally)
+            if need_new_slot {
+                slot = payload_sender.send_ref().await?;
+            }
+            need_new_slot = true;
             // By default, capture into the slot
             self.capture(&mut *slot).await?;
             self.processed += 1;
@@ -179,16 +184,21 @@ impl Capture {
             } else {
                 // This packet is from the future, store it
                 self.backlog.insert(this_count, **slot);
+                // But before we do that, we could potentially drain stuff from the backlog
+                while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
+                    (**slot).clone_from(&pl);
+                    self.next_expected_count += 1;
+                    slot = payload_sender.send_ref().await?;
+                    need_new_slot = false;
+                }
+                if !need_new_slot {
+                    continue;
+                }
             }
-            // If we got this far, this means we need to either replace the value of this slot with one from the backlog, or zeros
-            if let Some(payload) = self.backlog.remove(&self.next_expected_count) {
-                (**slot).clone_from(&payload);
-            } else {
-                // Nothing we can do, write zeros
-                (**slot).clone_from(&[0u8; PAYLOAD_SIZE]);
-                (**slot)[0..8].clone_from_slice(&this_count.to_be_bytes());
-                self.drops += 1;
-            }
+            // If we got this far, we can only send a zero
+            (**slot).clone_from(&[0u8; PAYLOAD_SIZE]);
+            (**slot)[0..8].clone_from_slice(&this_count.to_be_bytes());
+            self.drops += 1;
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
 use crate::common::{Channel, Payload};
-use log::{error, info};
+use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
 use std::{
     collections::HashMap,
@@ -181,6 +181,10 @@ impl Capture {
                 self.drops += 1;
                 need_new_slot = false;
             } else if this_count > self.next_expected_count + BACKLOG_BUFFER_PAYLOADS as u64 {
+                warn!(
+                    "Futuristic payload, jumping forward. Gap size - {}",
+                    this_count - self.next_expected_count
+                );
                 // The current payload is far enough in the future that we need to skip ahead
                 loop {
                     if let Some(pl) = self.backlog.remove(&self.next_expected_count) {

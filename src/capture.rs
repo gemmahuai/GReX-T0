@@ -6,6 +6,7 @@ use socket2::{Domain, Socket, Type};
 use std::{
     collections::HashMap,
     net::SocketAddr,
+    sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant},
 };
 use thingbuf::{
@@ -26,6 +27,8 @@ pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 const BACKLOG_BUFFER_PAYLOADS: usize = 1024;
 /// Polling interval for stats
 const STATS_POLL_DURATION: Duration = Duration::from_secs(10);
+/// Global atomic to hold the count of the first packet
+pub static FIRST_PACKET: AtomicU64 = AtomicU64::new(0);
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
@@ -251,6 +254,8 @@ pub async fn decode_split_task(
     to_dumps: Sender<Payload>,
 ) -> anyhow::Result<()> {
     info!("Starting decode-split");
+    // Marker bool for packet 1 - everything following is ordered. We need this count number to work back out the actual time of the stream
+    let mut first_packet = true;
     // Receive
     while let Some(payload) = from_cap.recv_ref().await {
         // Grab block
@@ -261,7 +266,10 @@ pub async fn decode_split_task(
         if let Ok(mut dump_ref) = to_dumps.try_send_ref() {
             dump_ref.clone_from(&*downsamp_ref);
         }
-        // Lexical drop sends it away
+        if first_packet {
+            FIRST_PACKET.store(downsamp_ref.count, Ordering::Relaxed);
+            first_packet = false;
+        }
     }
     Ok(())
 }

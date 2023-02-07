@@ -174,13 +174,30 @@ impl Capture {
             if self.first_payload {
                 self.first_payload = false;
                 self.next_expected_count = this_count + 1;
-                continue;
             } else if this_count == self.next_expected_count {
                 self.next_expected_count += 1;
-                continue;
             } else if this_count < self.next_expected_count {
                 // If the packet is from the past, we drop it
                 self.drops += 1;
+                need_new_slot = false;
+            } else if this_count > self.next_expected_count + BACKLOG_BUFFER_PAYLOADS as u64 {
+                // The current payload is far enough in the future that we need to skip ahead
+                loop {
+                    if let Some(pl) = self.backlog.remove(&self.next_expected_count) {
+                        (**slot).clone_from(&pl);
+                    } else {
+                        // Send zeros in the place of this payload
+                        (**slot).clone_from(&[0u8; PAYLOAD_SIZE]);
+                        (**slot)[0..8].clone_from_slice(&self.next_expected_count.to_be_bytes());
+                        self.drops += 1;
+                    }
+                    self.next_expected_count += 1;
+                    slot = payload_sender.send_ref().await?;
+                    if self.next_expected_count == this_count {
+                        break;
+                    }
+                }
+                need_new_slot = false;
             } else {
                 // This packet is from the future, store it
                 self.backlog.insert(this_count, **slot);
@@ -191,14 +208,7 @@ impl Capture {
                     slot = payload_sender.send_ref().await?;
                     need_new_slot = false;
                 }
-                if !need_new_slot {
-                    continue;
-                }
             }
-            // If we got this far, we can only send a zero
-            (**slot).clone_from(&[0u8; PAYLOAD_SIZE]);
-            (**slot)[0..8].clone_from_slice(&this_count.to_be_bytes());
-            self.drops += 1;
         }
     }
 }

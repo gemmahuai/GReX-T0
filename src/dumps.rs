@@ -15,9 +15,10 @@ pub struct DumpRing {
 }
 
 impl DumpRing {
-    pub fn push(&mut self, value: Payload) {
-        self.container[self.write_index] = value;
+    pub fn next_push(&mut self) -> &mut Payload {
+        let before_idx = self.write_index;
         self.write_index = (self.write_index + 1) & (self.capacity - 1);
+        &mut self.container[before_idx]
     }
 
     pub fn new(size_power: u32) -> Self {
@@ -94,8 +95,9 @@ pub async fn dump_task(
             }
         } else {
             // If we're not dumping, we're pushing data into the ringbuffer
-            if let Some(payload) = payload_reciever.recv().await {
-                ring.push(payload);
+            if let Some(payload) = payload_reciever.recv_ref().await.as_deref() {
+                let ring_ref = ring.next_push();
+                ring_ref.clone_from(payload);
             } else {
                 break;
             }

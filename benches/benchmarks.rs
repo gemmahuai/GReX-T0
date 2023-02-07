@@ -83,7 +83,11 @@ fn downsample_stokes(c: &mut Criterion) {
 pub fn push_ring(c: &mut Criterion) {
     let mut dr = DumpRing::new(15);
     let pl = Payload::default();
-    c.bench_function("push ring", |b| b.iter(|| dr.push(black_box(pl))));
+    c.bench_function("push ring", |b| {
+        b.iter(|| {
+            dr.next_push().clone_from(black_box(&pl));
+        })
+    });
 }
 
 pub fn to_ndarray(c: &mut Criterion) {

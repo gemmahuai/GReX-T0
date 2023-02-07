@@ -70,7 +70,7 @@ fn main() -> anyhow::Result<()> {
 
     // Spawn the more timing critical tasks
     let decode_downsample = std::thread::Builder::new()
-        .name("decode_split".to_string())
+        .name("decode_split_exfil".to_string())
         .spawn(move || -> anyhow::Result<()> {
             if !core_affinity::set_for_current(CoreId { id: 9 }) {
                 bail!("Couldn't set core affinity on capture thread");
@@ -79,18 +79,22 @@ fn main() -> anyhow::Result<()> {
                 .enable_all()
                 .build()?;
             rt.block_on(async {
-                let _ = try_join!(
+                let (_, _) = try_join!(
                     // Decode split
                     tokio::task::Builder::new()
                         .name("decode_split")
                         .spawn(capture::decode_split_task(pb_r, ds_s, dump_s))?,
+                    // Exfil
+                    tokio::task::Builder::new()
+                        .name("exfil")
+                        .spawn(exfil::dummy_consumer(ex_r))?,
                 )?;
                 Ok(())
             })
         })?;
 
     let dump_exfil = std::thread::Builder::new()
-        .name("downsample_dump_exfil".to_string())
+        .name("downsample_dump".to_string())
         .spawn(move || -> anyhow::Result<()> {
             if !core_affinity::set_for_current(CoreId { id: 10 }) {
                 bail!("Couldn't set core affinity on capture thread");
@@ -99,7 +103,7 @@ fn main() -> anyhow::Result<()> {
                 .enable_all()
                 .build()?;
             rt.block_on(async {
-                let (_, _, _) = try_join!(
+                let (_, _) = try_join!(
                     // Dumps
                     tokio::task::Builder::new()
                         .name("dump_fill")
@@ -109,10 +113,6 @@ fn main() -> anyhow::Result<()> {
                             packet_start,
                             cli.vbuf_power
                         ))?,
-                    // Exfil
-                    tokio::task::Builder::new()
-                        .name("exfil")
-                        .spawn(exfil::dummy_consumer(ex_r))?,
                     // Downsample
                     tokio::task::Builder::new().name("downsample").spawn(
                         processing::downsample_task(ds_r, ex_s, avg_s, cli.downsample_power)

@@ -4,7 +4,13 @@
 use anyhow::bail;
 pub use clap::Parser;
 use core_affinity::CoreId;
-use grex_t0::{args, capture, dumps, exfil, fpga::Device, monitoring, processing};
+use grex_t0::{
+    args, capture,
+    dumps::{self, DumpRing},
+    exfil,
+    fpga::Device,
+    monitoring, processing,
+};
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
 use thingbuf::mpsc::{channel, with_recycle};
@@ -31,6 +37,9 @@ fn main() -> anyhow::Result<()> {
     }
     // Create a dedicated single-threaded async runtime for the capture task
     let (pb_s, pb_r) = with_recycle(1024, capture::PayloadRecycle::new());
+
+    // Create the dump ring
+    let ring = DumpRing::new(cli.vbuf_power);
 
     // Create channels to connect everything else
     let (ds_s, ds_r) = channel(32768);
@@ -107,12 +116,7 @@ fn main() -> anyhow::Result<()> {
                     // Dumps
                     tokio::task::Builder::new()
                         .name("dump_fill")
-                        .spawn(dumps::dump_task(
-                            dump_r,
-                            trig_r,
-                            packet_start,
-                            cli.vbuf_power
-                        ))?,
+                        .spawn(dumps::dump_task(ring, dump_r, trig_r, packet_start,))?,
                     // Downsample
                     tokio::task::Builder::new().name("downsample").spawn(
                         processing::downsample_task(ds_r, ex_s, avg_s, cli.downsample_power)

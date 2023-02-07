@@ -41,7 +41,7 @@ impl DumpRing {
             .create("voltages")?;
         // And then write in chunks, draining the buffer
         let mut idx = 0;
-        let mut payload_time = *start_time;
+        let mut payload_time;
         let mut read_idx = self.write_index;
         loop {
             let pl = self.container[read_idx];
@@ -78,14 +78,12 @@ pub async fn trigger_task(sender: Sender<()>, port: u16) -> anyhow::Result<()> {
 
 #[allow(clippy::missing_panics_doc)]
 pub async fn dump_task(
+    mut ring: DumpRing,
     payload_reciever: Receiver<Payload>,
     signal_reciever: Receiver<()>,
     start_time: DateTime<Utc>,
-    vbuf_power: u32,
 ) -> anyhow::Result<()> {
     info!("Starting voltage ringbuffer fill task!");
-    // Create the ring buffer to store voltage dumps
-    let mut ring = DumpRing::new(vbuf_power);
     loop {
         // First check if we need to dump, as that takes priority
         if signal_reciever.try_recv().is_ok() {

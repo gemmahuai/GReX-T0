@@ -28,17 +28,17 @@ pub async fn downsample_task(
     let mut monitor_buf = vec![0f32; CHANNELS];
     let mut local_monitor_iters = 0;
 
-    while let Some(payload) = receiver.recv_ref().await {
+    while let Some(payload) = receiver.recv_ref().await.as_deref() {
         // Compute Stokes I
         let stokes = payload.stokes_i();
         // Add to both averaging bufs
         downsamp_buf
             .iter_mut()
-            .zip(&*stokes)
+            .zip(&stokes)
             .for_each(|(x, y)| *x += y);
         monitor_buf
             .iter_mut()
-            .zip(&*stokes)
+            .zip(&stokes)
             .for_each(|(x, y)| *x += y);
         // Increment the counts for both
         local_downsamp_iters += 1;
@@ -54,7 +54,7 @@ pub async fn downsample_task(
                 .for_each(|v| *v /= local_downsamp_iters as f32);
             send_ref.clone_from(&downsamp_buf);
             // And reset averaging
-            downsamp_buf = vec![0f32; CHANNELS];
+            downsamp_buf.iter_mut().for_each(|v| *v = 0.0);
             local_downsamp_iters = 0;
         }
 
@@ -70,7 +70,7 @@ pub async fn downsample_task(
             }
             // Reset averaging and timers
             last_monitor = Instant::now();
-            monitor_buf = vec![0f32; CHANNELS];
+            monitor_buf.iter_mut().for_each(|v| *v = 0.0);
             local_monitor_iters = 0;
         }
     }

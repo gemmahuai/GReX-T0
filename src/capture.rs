@@ -248,27 +248,41 @@ pub fn cap_task(
 }
 
 // This task will decode incoming packets and send to the ringbuffer and downsample tasks
-pub fn decode_split_task(
+pub fn decode_task(
     from_cap: Receiver<BoxedPayloadBytes, PayloadRecycle>,
-    to_downsample: Sender<Payload>,
-    to_dumps: Sender<Payload>,
+    to_split: Sender<Payload>,
 ) -> anyhow::Result<()> {
-    info!("Starting decode-split");
+    info!("Starting decode");
     // Marker bool for packet 1 - everything following is ordered. We need this count number to work back out the actual time of the stream
     let mut first_packet = true;
     // Receive
     while let Some(payload) = from_cap.recv_ref() {
         // Grab block
-        let mut downsamp_ref = to_downsample.send_ref()?;
+        let mut downsamp_ref = to_split.send_ref()?;
         // Decode directly into block
         *downsamp_ref = Payload::from_bytes(&**payload);
-        // This one won't cause backpressure because that only will happen when we're doing IO
-        if let Ok(mut dump_ref) = to_dumps.try_send_ref() {
-            dump_ref.clone_from(&*downsamp_ref);
-        }
         if first_packet {
             FIRST_PACKET.store(downsamp_ref.count, Ordering::Relaxed);
             first_packet = false;
+        }
+    }
+    Ok(())
+}
+
+pub fn split_task(
+    from_decode: Receiver<Payload>,
+    to_downsample: Sender<Payload>,
+    to_dumps: Sender<Payload>,
+) -> anyhow::Result<()> {
+    info!("Starting split");
+    while let Some(payload) = from_decode.recv_ref() {
+        // Grab block
+        let mut downsamp_ref = to_downsample.send_ref()?;
+        // Copy
+        downsamp_ref.clone_from(&payload);
+        // This one won't cause backpressure because that only will happen when we're doing IO
+        if let Ok(mut dump_ref) = to_dumps.try_send_ref() {
+            dump_ref.clone_from(&downsamp_ref);
         }
     }
     Ok(())

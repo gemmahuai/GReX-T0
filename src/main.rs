@@ -58,9 +58,11 @@ async fn main() -> anyhow::Result<()> {
     let (ds_s, ds_r) = warm_channel(16384);
     let (ex_s, ex_r) = warm_channel(100);
     let (dump_s, dump_r) = warm_channel(16384);
+    let (split_s, split_r) = warm_channel(16384);
     let (trig_s, trig_r) = warm_channel(5);
     let (stat_s, stat_r) = warm_channel(100);
     let (avg_s, avg_r) = warm_channel(100);
+
     // Start the threads
     macro_rules! thread_spawn {
             ($(($thread_name:literal, $fcall:expr)), +) => {
@@ -83,10 +85,8 @@ async fn main() -> anyhow::Result<()> {
             "downsample",
             processing::downsample_task(ds_r, ex_s, avg_s, cli.downsample_power)
         ),
-        (
-            "decode_split",
-            capture::decode_split_task(pb_r, ds_s, dump_s)
-        ),
+        ("decode", capture::decode_task(pb_r, split_s)),
+        ("split", capture::split_task(split_r, ds_s, dump_s,)),
         ("dump", dumps::dump_task(ring, dump_r, trig_r, packet_start)),
         (
             "exfil",

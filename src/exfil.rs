@@ -2,11 +2,12 @@ use crate::capture::FIRST_PACKET;
 use crate::common::{Stokes, CHANNELS, PACKET_CADENCE};
 use byte_slice_cast::AsByteSlice;
 use chrono::{DateTime, Datelike, Timelike, Utc};
+use lending_iterator::prelude::*;
 use log::{debug, info};
 use psrdada::client::DadaClient;
-use psrdada::prelude::*;
+use std::collections::HashMap;
+use std::io::Write;
 use std::sync::atomic::Ordering;
-use std::{collections::HashMap, io::Write};
 use thingbuf::mpsc::Receiver;
 
 // Set by hardware (in MHz)

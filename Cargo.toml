@@ -34,8 +34,9 @@ thiserror = "1"
 thingbuf = "0.1"
 core_affinity = "0.8"
 console-subscriber = "0.1"
-psrdada = "0.3"
+psrdada = "0.2"
 byte-slice-cast = "1"
+lending-iterator = "0.1.6"
 
 [lib]
 name = "grex_t0"

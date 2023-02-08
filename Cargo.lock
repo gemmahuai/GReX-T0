@@ -965,6 +965,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.0.0-rc.2",
  "lazy_static",
+ "lending-iterator",
  "log",
  "ndarray",
  "num-complex",
@@ -1979,9 +1980,9 @@ checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
 
 [[package]]
 name = "psrdada"
-version = "0.3.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef5e628498c1dad54251e93d0033f14a1a3652526a05b4c113d977fa1f48e388"
+checksum = "17ede2533da74562490d3fa53a043f6ebc63c303e269fc3e0fea7450e64cf53f"
 dependencies = [
  "lending-iterator",
  "nom",
@@ -1992,9 +1993,9 @@ dependencies = [
 
 [[package]]
 name = "psrdada-sys"
-version = "0.3.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43c801888548453f4d771e7ce10cd778bcefa52d0287ddbd11a1ff7686833dac"
+checksum = "73620dab0cc609b7f92f913cfb8c84826c434a45207b58c39185c77cd21e4346"
 dependencies = [
  "bindgen",
  "cc",

@@ -106,7 +106,7 @@ impl Capture {
         })
     }
 
-    pub fn capture(&mut self, buf: &mut PayloadBytes) -> anyhow::Result<()> {
+    pub fn capture(&mut self, buf: &mut [u8]) -> anyhow::Result<()> {
         let n = self.sock.recv(buf)?;
         if n != buf.len() {
             Err(Error::SizeMismatch(n).into())
@@ -117,18 +117,18 @@ impl Capture {
 
     pub fn start(
         &mut self,
-        payload_sender: Sender<PayloadBytes>,
+        payload_sender: Sender<Vec<u8>>,
         stats_send: Sender<Stats>,
         stats_polling_time: Duration,
     ) -> anyhow::Result<()> {
         let mut last_stats = Instant::now();
-        let mut capture_buf = [0u8; PAYLOAD_SIZE];
+        let mut capture_buf = vec![0u8; PAYLOAD_SIZE];
         loop {
             // Capture into buf
-            self.capture(&mut capture_buf)?;
+            self.capture(&mut capture_buf[..])?;
             self.processed += 1;
             // Then, we get the count
-            let this_count = count(&capture_buf);
+            let this_count = count(&capture_buf[..]);
             // Send away the stats if the time has come (non blocking)
             if last_stats.elapsed() >= stats_polling_time {
                 let _ = stats_send.try_send(Stats {
@@ -144,7 +144,7 @@ impl Capture {
             } else if this_count == self.next_expected_count {
                 self.next_expected_count += 1;
                 // And send
-                payload_sender.send(capture_buf)?;
+                payload_sender.send(capture_buf.clone())?;
             } else if this_count < self.next_expected_count {
                 // If the packet is from the past, we drop it
                 self.drops += 1;
@@ -156,12 +156,12 @@ impl Capture {
                 // The current payload is far enough in the future that we need to skip ahead
                 loop {
                     if let Some(pl) = self.backlog.remove(&self.next_expected_count) {
-                        payload_sender.send(pl)?;
+                        payload_sender.send(pl.to_vec())?;
                     } else {
                         // Send zeros in the place of this payload
-                        let mut pl = [0u8; PAYLOAD_SIZE];
+                        let mut pl = vec![0u8; PAYLOAD_SIZE];
                         pl[0..8].clone_from_slice(&self.next_expected_count.to_be_bytes());
-                        payload_sender.send(capture_buf)?;
+                        payload_sender.send(pl)?;
                         self.drops += 1;
                     }
                     self.next_expected_count += 1;
@@ -171,10 +171,11 @@ impl Capture {
                 }
             } else {
                 // This packet is from the future, store it
-                self.backlog.insert(this_count, capture_buf);
+                self.backlog
+                    .insert(this_count, capture_buf.clone().try_into().unwrap());
                 // But before we do that, we could potentially drain stuff from the backlog
                 while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
-                    payload_sender.send(pl)?;
+                    payload_sender.send(pl.to_vec())?;
                     self.next_expected_count += 1;
                 }
             }
@@ -183,7 +184,7 @@ impl Capture {
 }
 
 /// Decode just the count from a byte array
-fn count(pl: &PayloadBytes) -> Count {
+fn count(pl: &[u8]) -> Count {
     u64::from_be_bytes(pl[0..8].try_into().unwrap())
 }
 
@@ -195,7 +196,7 @@ pub struct Stats {
 
 pub fn cap_task(
     port: u16,
-    cap_send: Sender<PayloadBytes>,
+    cap_send: Sender<Vec<u8>>,
     stats_send: Sender<Stats>,
 ) -> anyhow::Result<()> {
     info!("Starting capture task!");
@@ -204,10 +205,7 @@ pub fn cap_task(
 }
 
 // This task will decode incoming packets and send to the ringbuffer and downsample tasks
-pub fn decode_task(
-    from_cap: Receiver<PayloadBytes>,
-    to_split: Sender<Payload>,
-) -> anyhow::Result<()> {
+pub fn decode_task(from_cap: Receiver<Vec<u8>>, to_split: Sender<Payload>) -> anyhow::Result<()> {
     info!("Starting decode");
     // Marker bool for packet 1 - everything following is ordered. We need this count number to work back out the actual time of the stream
     let mut first_packet = true;

@@ -2,7 +2,9 @@ use anyhow::bail;
 pub use clap::Parser;
 use core_affinity::CoreId;
 use grex_t0::{
-    args, capture,
+    args,
+    capture::{self, Stats, PAYLOAD_SIZE},
+    common::{Payload, CHANNELS},
     dumps::{self, DumpRing},
     exfil,
     fpga::Device,
@@ -16,15 +18,15 @@ use thingbuf::{
 };
 use tokio::try_join;
 
-fn warm_channel<T, R>(capacity: usize) -> (Sender<T, R>, Receiver<T, R>)
+fn warm_channel<T, R>(capacity: usize, fill: T) -> (Sender<T, R>, Receiver<T, R>)
 where
     T: Clone,
     R: Recycle<T> + Default,
 {
     let (s, r) = with_recycle(capacity, R::default());
     for _ in 0..capacity {
-        let _ = s.send_ref();
-        let _ = r.recv_ref();
+        let _ = s.send(fill.clone());
+        let _ = r.recv();
     }
     (s, r)
 }
@@ -55,15 +57,21 @@ async fn main() -> anyhow::Result<()> {
     let ring = DumpRing::new(cli.vbuf_power);
     // Create channels to connect everything else
     let fast_path_buffers = 130_000; // At least a second of delay
-    let (pb_s, pb_r) = warm_channel(fast_path_buffers);
-    let (ds_s, ds_r) = warm_channel(fast_path_buffers);
-    let (ex_s, ex_r) = warm_channel(fast_path_buffers);
-    let (dump_s, dump_r) = warm_channel(fast_path_buffers);
-    let (split_s, split_r) = warm_channel(fast_path_buffers);
+    let (pb_s, pb_r) = warm_channel(fast_path_buffers, Box::new([0u8; PAYLOAD_SIZE]));
+    let (ds_s, ds_r) = warm_channel(fast_path_buffers, Payload::default());
+    let (ex_s, ex_r) = warm_channel(fast_path_buffers, vec![0f32; CHANNELS]);
+    let (dump_s, dump_r) = warm_channel(fast_path_buffers, Payload::default());
+    let (split_s, split_r) = warm_channel(fast_path_buffers, Payload::default());
 
-    let (trig_s, trig_r) = warm_channel(5);
-    let (stat_s, stat_r) = warm_channel(100);
-    let (avg_s, avg_r) = warm_channel(100);
+    let (trig_s, trig_r) = warm_channel(5, ());
+    let (stat_s, stat_r) = warm_channel(
+        100,
+        Stats {
+            drops: 0,
+            processed: 0,
+        },
+    );
+    let (avg_s, avg_r) = warm_channel(100, vec![0f32; CHANNELS]);
 
     // Start the threads
     macro_rules! thread_spawn {

@@ -36,13 +36,13 @@ pub fn downsample_task(
             .iter_mut()
             .zip(&stokes)
             .for_each(|(x, y)| *x += y);
-        monitor_buf
-            .iter_mut()
-            .zip(&stokes)
-            .for_each(|(x, y)| *x += y);
+        // monitor_buf
+        //     .iter_mut()
+        //     .zip(&stokes)
+        //     .for_each(|(x, y)| *x += y);
         // Increment the counts for both
         local_downsamp_iters += 1;
-        local_monitor_iters += 1;
+        // local_monitor_iters += 1;
 
         // Check for downsample exit condition
         if local_downsamp_iters == downsamp_iters {
@@ -59,20 +59,20 @@ pub fn downsample_task(
         }
 
         // Check for monitor exit condition
-        if last_monitor.elapsed() >= MONITOR_CADENCE {
-            // Get a handle (non blocking) on the sender
-            if let Ok(mut send_ref) = monitor.try_send_ref() {
-                // And write averages
-                monitor_buf
-                    .iter_mut()
-                    .for_each(|v| *v /= local_monitor_iters as f32);
-                send_ref.clone_from(&monitor_buf);
-            }
-            // Reset averaging and timers
-            last_monitor = Instant::now();
-            monitor_buf.iter_mut().for_each(|v| *v = 0.0);
-            local_monitor_iters = 0;
-        }
+        // if last_monitor.elapsed() >= MONITOR_CADENCE {
+        //     // Get a handle (non blocking) on the sender
+        //     if let Ok(mut send_ref) = monitor.try_send_ref() {
+        //         // And write averages
+        //         monitor_buf
+        //             .iter_mut()
+        //             .for_each(|v| *v /= local_monitor_iters as f32);
+        //         send_ref.clone_from(&monitor_buf);
+        //     }
+        //     // Reset averaging and timers
+        //     last_monitor = Instant::now();
+        //     monitor_buf.iter_mut().for_each(|v| *v = 0.0);
+        //     local_monitor_iters = 0;
+        // }
     }
     Ok(())
 }

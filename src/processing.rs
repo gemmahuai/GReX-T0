@@ -32,18 +32,14 @@ pub fn downsample_task(
         let payload = receiver.recv()?;
         // Compute Stokes I
         let stokes = payload.stokes_i();
-        // Add to both averaging bufs
+        // Add to averaging bufs
         downsamp_buf
             .iter_mut()
             .zip(&stokes)
             .for_each(|(x, y)| *x += y);
-        monitor_buf
-            .iter_mut()
-            .zip(&stokes)
-            .for_each(|(x, y)| *x += y);
-        // Increment the counts for both
+
+        // Increment the count
         local_downsamp_iters += 1;
-        local_monitor_iters += 1;
 
         // Check for downsample exit condition
         if local_downsamp_iters == downsamp_iters {
@@ -52,23 +48,31 @@ pub fn downsample_task(
                 .iter_mut()
                 .for_each(|v| *v /= local_downsamp_iters as f32);
             sender.send(downsamp_buf)?;
+
+            // Then, use *this* average to save us some cycles for the monitoring
+            monitor_buf
+                .iter_mut()
+                .zip(&downsamp_buf)
+                .for_each(|(x, y)| *x += y);
+            local_monitor_iters += 1;
+
             // And reset averaging
             downsamp_buf.iter_mut().for_each(|v| *v = 0.0);
             local_downsamp_iters = 0;
-        }
 
-        //Check for monitor exit condition
-        if last_monitor.elapsed() >= MONITOR_CADENCE {
-            // And write averages
-            monitor_buf
-                .iter_mut()
-                .for_each(|v| *v /= local_monitor_iters as f32);
-            // Get a handle (non blocking) on the sender
-            monitor.send(monitor_buf)?;
-            // Reset averaging and timers
-            last_monitor = Instant::now();
-            monitor_buf.iter_mut().for_each(|v| *v = 0.0);
-            local_monitor_iters = 0;
+            //Check for monitor exit condition
+            if last_monitor.elapsed() >= MONITOR_CADENCE {
+                // And write averages
+                monitor_buf
+                    .iter_mut()
+                    .for_each(|v| *v /= local_monitor_iters as f32);
+                // Get a handle (non blocking) on the sender
+                monitor.send(monitor_buf)?;
+                // Reset averaging and timers
+                last_monitor = Instant::now();
+                monitor_buf.iter_mut().for_each(|v| *v = 0.0);
+                local_monitor_iters = 0;
+            }
         }
     }
 }

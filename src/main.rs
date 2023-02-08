@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
     // Create channels to connect everything else
-    let fast_path_buffers = 32_768; // At least a second of delay
+    let fast_path_buffers = 131_072; // At least a second of delay
     let (pb_s, pb_r) = bounded(fast_path_buffers);
     let (ds_s, ds_r) = bounded(fast_path_buffers);
     let (ex_s, ex_r) = bounded(fast_path_buffers);

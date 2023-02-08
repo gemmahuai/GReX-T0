@@ -54,11 +54,13 @@ async fn main() -> anyhow::Result<()> {
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
     // Create channels to connect everything else
-    let (pb_s, pb_r) = warm_channel(16384);
-    let (ds_s, ds_r) = warm_channel(16384);
-    let (ex_s, ex_r) = warm_channel(100);
-    let (dump_s, dump_r) = warm_channel(16384);
-    let (split_s, split_r) = warm_channel(16384);
+    let fast_path_buffers = 65536;
+    let (pb_s, pb_r) = warm_channel(fast_path_buffers);
+    let (ds_s, ds_r) = warm_channel(fast_path_buffers);
+    let (ex_s, ex_r) = warm_channel(fast_path_buffers);
+    let (dump_s, dump_r) = warm_channel(fast_path_buffers);
+    let (split_s, split_r) = warm_channel(fast_path_buffers);
+
     let (trig_s, trig_r) = warm_channel(5);
     let (stat_s, stat_r) = warm_channel(100);
     let (avg_s, avg_r) = warm_channel(100);

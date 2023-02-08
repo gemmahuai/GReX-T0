@@ -3,16 +3,16 @@
 use crate::common::{Payload, Stokes, CHANNELS};
 use crossbeam_channel::{Receiver, Sender};
 use log::info;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// How many packets before we send one off to monitor
-const _MONITOR_CADENCE: Duration = Duration::from_secs(10);
+const MONITOR_CADENCE: Duration = Duration::from_secs(10);
 
 #[allow(clippy::missing_panics_doc)]
 pub fn downsample_task(
     receiver: Receiver<Payload>,
     sender: Sender<Stokes>,
-    _monitor: Sender<Stokes>,
+    monitor: Sender<Stokes>,
     downsample_power: u32,
 ) -> anyhow::Result<()> {
     info!("Starting downsample");
@@ -24,9 +24,9 @@ pub fn downsample_task(
     let mut local_downsamp_iters = 0;
 
     // Here is the state for the monitoring part
-    // let mut last_monitor = Instant::now();
-    // let mut monitor_buf = [0f32; CHANNELS];
-    // let mut local_monitor_iters = 0;
+    let mut last_monitor = Instant::now();
+    let mut monitor_buf = [0f32; CHANNELS];
+    let mut local_monitor_iters = 0;
 
     loop {
         let payload = receiver.recv()?;
@@ -37,13 +37,13 @@ pub fn downsample_task(
             .iter_mut()
             .zip(&stokes)
             .for_each(|(x, y)| *x += y);
-        // monitor_buf
-        //     .iter_mut()
-        //     .zip(&stokes)
-        //     .for_each(|(x, y)| *x += y);
+        monitor_buf
+            .iter_mut()
+            .zip(&stokes)
+            .for_each(|(x, y)| *x += y);
         // Increment the counts for both
         local_downsamp_iters += 1;
-        // local_monitor_iters += 1;
+        local_monitor_iters += 1;
 
         // Check for downsample exit condition
         if local_downsamp_iters == downsamp_iters {
@@ -57,20 +57,18 @@ pub fn downsample_task(
             local_downsamp_iters = 0;
         }
 
-        // Check for monitor exit condition
-        // if last_monitor.elapsed() >= MONITOR_CADENCE {
-        //     // Get a handle (non blocking) on the sender
-        //     if let Ok(mut send_ref) = monitor.try_send_ref() {
-        //         // And write averages
-        //         monitor_buf
-        //             .iter_mut()
-        //             .for_each(|v| *v /= local_monitor_iters as f32);
-        //         send_ref.clone_from(&monitor_buf);
-        //     }
-        //     // Reset averaging and timers
-        //     last_monitor = Instant::now();
-        //     monitor_buf.iter_mut().for_each(|v| *v = 0.0);
-        //     local_monitor_iters = 0;
-        // }
+        //Check for monitor exit condition
+        if last_monitor.elapsed() >= MONITOR_CADENCE {
+            // And write averages
+            monitor_buf
+                .iter_mut()
+                .for_each(|v| *v /= local_monitor_iters as f32);
+            // Get a handle (non blocking) on the sender
+            monitor.send(monitor_buf)?;
+            // Reset averaging and timers
+            last_monitor = Instant::now();
+            monitor_buf.iter_mut().for_each(|v| *v = 0.0);
+            local_monitor_iters = 0;
+        }
     }
 }

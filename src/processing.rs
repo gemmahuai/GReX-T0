@@ -10,7 +10,7 @@ const MONITOR_CADENCE: Duration = Duration::from_secs(10);
 
 #[allow(clippy::missing_panics_doc)]
 pub fn downsample_task(
-    receiver: Receiver<Payload>,
+    receiver: Receiver<Box<Payload>>,
     sender: Sender<Stokes>,
     monitor: Sender<Stokes>,
     downsample_power: u32,

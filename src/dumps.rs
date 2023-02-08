@@ -78,7 +78,7 @@ pub async fn trigger_task(sender: Sender<()>, port: u16) -> anyhow::Result<()> {
 
 pub fn dump_task(
     mut ring: DumpRing,
-    payload_reciever: Receiver<Payload>,
+    payload_reciever: Receiver<Box<Payload>>,
     signal_reciever: Receiver<()>,
     start_time: DateTime<Utc>,
 ) -> anyhow::Result<()> {

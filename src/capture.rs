@@ -205,7 +205,10 @@ pub fn cap_task(
 }
 
 // This task will decode incoming packets and send to the ringbuffer and downsample tasks
-pub fn decode_task(from_cap: Receiver<Vec<u8>>, to_split: Sender<Payload>) -> anyhow::Result<()> {
+pub fn decode_task(
+    from_cap: Receiver<Vec<u8>>,
+    to_split: Sender<Box<Payload>>,
+) -> anyhow::Result<()> {
     info!("Starting decode");
     // Marker bool for packet 1 - everything following is ordered. We need this count number to work back out the actual time of the stream
     let mut first_packet = true;
@@ -213,7 +216,7 @@ pub fn decode_task(from_cap: Receiver<Vec<u8>>, to_split: Sender<Payload>) -> an
     loop {
         let payload = from_cap.recv()?;
         // Decode
-        let pl = Payload::from_bytes(&payload);
+        let pl = Box::new(Payload::from_bytes(&payload));
         if first_packet {
             FIRST_PACKET.store(pl.count, Ordering::Relaxed);
             first_packet = false;
@@ -223,14 +226,14 @@ pub fn decode_task(from_cap: Receiver<Vec<u8>>, to_split: Sender<Payload>) -> an
 }
 
 pub fn split_task(
-    from_decode: Receiver<Payload>,
-    to_downsample: Sender<Payload>,
-    to_dumps: Sender<Payload>,
+    from_decode: Receiver<Box<Payload>>,
+    to_downsample: Sender<Box<Payload>>,
+    to_dumps: Sender<Box<Payload>>,
 ) -> anyhow::Result<()> {
     info!("Starting split");
     loop {
         let pl = from_decode.recv()?;
-        to_downsample.send(pl)?;
+        to_downsample.send(pl.clone())?;
         let _ = to_dumps.try_send(pl);
     }
 }

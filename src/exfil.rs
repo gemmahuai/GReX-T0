@@ -54,7 +54,7 @@ pub async fn dada_consumer(
         ("OBS_OFFSET".to_owned(), 0.to_string()),
         (
             "TSAMP".to_owned(),
-            (PACKET_CADENCE / downsample_factor as f64 * 1e6).to_string(),
+            (PACKET_CADENCE * downsample_factor as f64 * 1e6).to_string(),
         ),
     ]);
     // Grab PSRDADA writing context

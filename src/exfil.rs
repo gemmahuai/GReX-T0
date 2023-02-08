@@ -69,7 +69,7 @@ pub fn dada_consumer(
         let mut block = data_writer.next().unwrap();
         loop {
             // Grab the next stokes parameters (already downsampled)
-            let mut stokes = match stokes_rcv.recv() {
+            let mut stokes = match stokes_rcv.recv_ref() {
                 Some(s) => s,
                 None => return Ok(()),
             };

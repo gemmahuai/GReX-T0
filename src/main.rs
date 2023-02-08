@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::bail;
 pub use clap::Parser;
 use core_affinity::CoreId;
@@ -152,6 +154,9 @@ fn main() -> anyhow::Result<()> {
             )
         )
     );
+
+    // Something wonky is still hapening on startup where the capture task locks up, I'll just add some delay
+    std::thread::sleep(Duration::from_secs(5));
 
     // And then finally the capture task
     let capture_task = thread_tasks!(

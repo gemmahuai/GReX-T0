@@ -281,9 +281,9 @@ pub fn split_task(
         // Copy
         downsamp_ref.clone_from(&payload);
         // This one won't cause backpressure because that only will happen when we're doing IO
-        if let Ok(mut dump_ref) = to_dumps.try_send_ref() {
-            dump_ref.clone_from(&downsamp_ref);
-        }
+        // if let Ok(mut dump_ref) = to_dumps.try_send_ref() {
+        //     dump_ref.clone_from(&downsamp_ref);
+        // }
     }
     Ok(())
 }

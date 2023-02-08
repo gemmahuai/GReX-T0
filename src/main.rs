@@ -117,7 +117,11 @@ fn main() -> anyhow::Result<()> {
         (
             ("collect", monitoring::monitor_task(device, stat_r, avg_r)),
             ("web_server", monitoring::start_web_server(cli.metrics_port)),
-            ("dump_trig", dumps::trigger_task(trig_s, cli.trig_port))
+            ("dump_trig", dumps::trigger_task(trig_s, cli.trig_port)),
+            (
+                "downsample",
+                processing::downsample_task(ds_r, ex_s, avg_s, cli.downsample_power)
+            )
         )
     );
 
@@ -141,24 +145,12 @@ fn main() -> anyhow::Result<()> {
         capture::decode_split_task(pb_r, ds_s, dump_s)
     );
 
-    let downsample = thread_tasks!(
-        ("downsamp_dump", 11),
-        (
-            (
-                "dump_fill",
-                dumps::dump_task(ring, dump_r, trig_r, packet_start)
-            ),
-            (
-                "downsample",
-                processing::downsample_task(ds_r, ex_s, avg_s, cli.downsample_power)
-            )
-        )
+    let dump = thread_tasks!(
+        ("dump", 11),
+        dumps::dump_task(ring, dump_r, trig_r, packet_start)
     );
 
-    // Something wonky is still hapening on startup where the capture task locks up, I'll just add some delay
-    std::thread::sleep(Duration::from_secs(5));
-
-    // And then finally the capture task
+    // Start capture
     let capture_task = thread_tasks!(
         ("capture", 12),
         capture::cap_task(cli.cap_port, pb_s, stat_s)
@@ -168,7 +160,7 @@ fn main() -> anyhow::Result<()> {
     monitoring_tasks.join().unwrap().unwrap();
     decode_downsample.join().unwrap().unwrap();
     capture_task.join().unwrap().unwrap();
-    downsample.join().unwrap().unwrap();
+    dump.join().unwrap().unwrap();
 
     Ok(())
 }

@@ -2,13 +2,13 @@ use crate::capture::FIRST_PACKET;
 use crate::common::{Stokes, CHANNELS, PACKET_CADENCE};
 use byte_slice_cast::AsByteSlice;
 use chrono::{DateTime, Datelike, Timelike, Utc};
+use crossbeam_channel::Receiver;
 use lending_iterator::prelude::*;
 use log::{debug, info};
 use psrdada::client::DadaClient;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::atomic::Ordering;
-use thingbuf::mpsc::blocking::Receiver;
 
 // Set by hardware (in MHz)
 const _LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
@@ -30,7 +30,7 @@ fn heimdall_timestamp(time: &DateTime<Utc>) -> String {
 /// A consumer that just grabs stokes off the channel and drops them
 pub fn dummy_consumer(stokes_rcv: Receiver<Stokes>) -> anyhow::Result<()> {
     info!("Starting dummy consumer");
-    while stokes_rcv.recv().is_some() {}
+    while stokes_rcv.recv().is_ok() {}
     Ok(())
 }
 
@@ -69,10 +69,7 @@ pub fn dada_consumer(
         let mut block = data_writer.next().unwrap();
         loop {
             // Grab the next stokes parameters (already downsampled)
-            let mut stokes = match stokes_rcv.recv_ref() {
-                Some(s) => s,
-                None => return Ok(()),
-            };
+            let mut stokes = stokes_rcv.recv()?;
             // Timestamp first one
             if first_payload {
                 first_payload = false;

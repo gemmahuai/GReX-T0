@@ -960,6 +960,7 @@ dependencies = [
  "console-subscriber",
  "core_affinity",
  "criterion",
+ "crossbeam-channel",
  "fixed",
  "hdf5",
  "http-body-util",
@@ -976,7 +977,6 @@ dependencies = [
  "regex",
  "rsntp",
  "socket2",
- "thingbuf",
  "thiserror",
  "tokio",
 ]
@@ -2322,16 +2322,6 @@ name = "textwrap"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "222a222a5bfe1bba4a77b45ec488a741b3cb8872e5e499451fd7d0129c9c7c3d"
-
-[[package]]
-name = "thingbuf"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bee2d290fe0db0225026350bc1f0bd02b2daad43b09b56780e29e549effcd54a"
-dependencies = [
- "parking_lot 0.12.1",
- "pin-project",
-]
 
 [[package]]
 name = "thiserror"

@@ -2,10 +2,10 @@
 
 use crate::common::{Payload, CHANNELS};
 use chrono::{DateTime, Utc};
+use crossbeam_channel::{Receiver, Sender};
 use hdf5::File;
 use log::{info, warn};
 use std::net::SocketAddr;
-use thingbuf::mpsc::blocking::{Receiver, Sender};
 use tokio::net::UdpSocket;
 
 pub struct DumpRing {
@@ -93,13 +93,9 @@ pub fn dump_task(
             }
         } else {
             // If we're not dumping, we're pushing data into the ringbuffer
-            if let Some(payload) = payload_reciever.recv_ref().as_deref() {
-                let ring_ref = ring.next_push();
-                ring_ref.clone_from(payload);
-            } else {
-                break;
-            }
+            let pl = payload_reciever.recv()?;
+            let ring_ref = ring.next_push();
+            ring_ref.clone_from(&pl);
         }
     }
-    Ok(())
 }

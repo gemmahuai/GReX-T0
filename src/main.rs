@@ -1,10 +1,9 @@
 use anyhow::bail;
 pub use clap::Parser;
 use core_affinity::CoreId;
+use crossbeam_channel::bounded;
 use grex_t0::{
-    args,
-    capture::{self, Stats, PAYLOAD_SIZE},
-    common::{Payload, CHANNELS},
+    args, capture,
     dumps::{self, DumpRing},
     exfil,
     fpga::Device,
@@ -12,24 +11,7 @@ use grex_t0::{
 };
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
-use thingbuf::{
-    mpsc::blocking::{with_recycle, Receiver, Sender},
-    Recycle,
-};
 use tokio::try_join;
-
-fn warm_channel<T, R>(capacity: usize, fill: T) -> (Sender<T, R>, Receiver<T, R>)
-where
-    T: Clone,
-    R: Recycle<T> + Default,
-{
-    let (s, r) = with_recycle(capacity, R::default());
-    for _ in 0..capacity {
-        let _ = s.send(fill.clone());
-        let _ = r.recv();
-    }
-    (s, r)
-}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -56,22 +38,15 @@ async fn main() -> anyhow::Result<()> {
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
     // Create channels to connect everything else
-    let fast_path_buffers = 130_000; // At least a second of delay
-    let (pb_s, pb_r) = warm_channel(fast_path_buffers, Box::new([0u8; PAYLOAD_SIZE]));
-    let (ds_s, ds_r) = warm_channel(fast_path_buffers, Payload::default());
-    let (ex_s, ex_r) = warm_channel(fast_path_buffers, vec![0f32; CHANNELS]);
-    let (dump_s, dump_r) = warm_channel(fast_path_buffers, Payload::default());
-    let (split_s, split_r) = warm_channel(fast_path_buffers, Payload::default());
-
-    let (trig_s, trig_r) = warm_channel(5, ());
-    let (stat_s, stat_r) = warm_channel(
-        100,
-        Stats {
-            drops: 0,
-            processed: 0,
-        },
-    );
-    let (avg_s, avg_r) = warm_channel(100, vec![0f32; CHANNELS]);
+    let fast_path_buffers = 32_768; // At least a second of delay
+    let (pb_s, pb_r) = bounded(fast_path_buffers);
+    let (ds_s, ds_r) = bounded(fast_path_buffers);
+    let (ex_s, ex_r) = bounded(fast_path_buffers);
+    let (dump_s, dump_r) = bounded(fast_path_buffers);
+    let (split_s, split_r) = bounded(fast_path_buffers);
+    let (trig_s, trig_r) = bounded(5);
+    let (stat_s, stat_r) = bounded(100);
+    let (avg_s, avg_r) = bounded(100);
 
     // Start the threads
     macro_rules! thread_spawn {

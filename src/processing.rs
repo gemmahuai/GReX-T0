@@ -1,18 +1,18 @@
 //! Inter-thread processing (downsampling, etc)
 
 use crate::common::{Payload, Stokes, CHANNELS};
+use crossbeam_channel::{Receiver, Sender};
 use log::info;
-use std::time::{Duration, Instant};
-use thingbuf::mpsc::blocking::{Receiver, Sender};
+use std::time::Duration;
 
 /// How many packets before we send one off to monitor
-const MONITOR_CADENCE: Duration = Duration::from_secs(10);
+const _MONITOR_CADENCE: Duration = Duration::from_secs(10);
 
 #[allow(clippy::missing_panics_doc)]
 pub fn downsample_task(
     receiver: Receiver<Payload>,
     sender: Sender<Stokes>,
-    monitor: Sender<Stokes>,
+    _monitor: Sender<Stokes>,
     downsample_power: u32,
 ) -> anyhow::Result<()> {
     info!("Starting downsample");
@@ -20,15 +20,16 @@ pub fn downsample_task(
     // We have two averaging states, one for the normal downsample process and one for monitoring
     // They differ in that the standard "thru" connection is averaging by counts and the monitoing one is averaging by time
     let downsamp_iters = 2usize.pow(downsample_power);
-    let mut downsamp_buf = vec![0f32; CHANNELS];
+    let mut downsamp_buf = [0f32; CHANNELS];
     let mut local_downsamp_iters = 0;
 
     // Here is the state for the monitoring part
-    let mut last_monitor = Instant::now();
-    let mut monitor_buf = vec![0f32; CHANNELS];
-    let mut local_monitor_iters = 0;
+    // let mut last_monitor = Instant::now();
+    // let mut monitor_buf = [0f32; CHANNELS];
+    // let mut local_monitor_iters = 0;
 
-    while let Some(payload) = receiver.recv_ref().as_deref() {
+    loop {
+        let payload = receiver.recv()?;
         // Compute Stokes I
         let stokes = payload.stokes_i();
         // Add to both averaging bufs
@@ -46,13 +47,11 @@ pub fn downsample_task(
 
         // Check for downsample exit condition
         if local_downsamp_iters == downsamp_iters {
-            // Get a handle on the sender
-            let mut send_ref = sender.send_ref()?;
             // Write averages directly into it
             downsamp_buf
                 .iter_mut()
                 .for_each(|v| *v /= local_downsamp_iters as f32);
-            send_ref.clone_from(&downsamp_buf);
+            sender.send(downsamp_buf)?;
             // And reset averaging
             downsamp_buf.iter_mut().for_each(|v| *v = 0.0);
             local_downsamp_iters = 0;
@@ -74,5 +73,4 @@ pub fn downsample_task(
         //     local_monitor_iters = 0;
         // }
     }
-    Ok(())
 }

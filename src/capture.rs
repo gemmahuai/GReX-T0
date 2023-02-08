@@ -1,6 +1,7 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
 use crate::common::{Channel, Payload};
+use crossbeam_channel::{Receiver, Sender};
 use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
 use std::net::UdpSocket;
@@ -9,10 +10,6 @@ use std::{
     net::SocketAddr,
     sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant},
-};
-use thingbuf::{
-    mpsc::blocking::{Receiver, Sender},
-    Recycle,
 };
 
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
@@ -66,37 +63,6 @@ pub enum Error {
 
 type Count = u64;
 pub type PayloadBytes = [u8; PAYLOAD_SIZE];
-type BoxedPayloadBytes = Box<PayloadBytes>;
-
-#[must_use]
-pub fn boxed_payload() -> BoxedPayloadBytes {
-    Box::new([0u8; PAYLOAD_SIZE])
-}
-
-pub struct PayloadRecycle;
-
-impl PayloadRecycle {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for PayloadRecycle {
-    fn default() -> Self {
-        Self
-    }
-}
-
-impl Recycle<BoxedPayloadBytes> for PayloadRecycle {
-    fn new_element(&self) -> BoxedPayloadBytes {
-        Box::new([0u8; PAYLOAD_SIZE])
-    }
-
-    fn recycle(&self, _: &mut BoxedPayloadBytes) {
-        // Do nothing, we will write to every position anyway
-    }
-}
 
 pub struct Capture {
     sock: UdpSocket,
@@ -151,32 +117,24 @@ impl Capture {
 
     pub fn start(
         &mut self,
-        payload_sender: Sender<BoxedPayloadBytes, PayloadRecycle>,
+        payload_sender: Sender<PayloadBytes>,
         stats_send: Sender<Stats>,
         stats_polling_time: Duration,
     ) -> anyhow::Result<()> {
         let mut last_stats = Instant::now();
-        let mut need_new_slot = false;
-        let mut slot = payload_sender.send_ref()?;
+        let mut capture_buf = [0u8; PAYLOAD_SIZE];
         loop {
-            // Grab the next slot (conditionally)
-            if need_new_slot {
-                slot = payload_sender.send_ref()?;
-            }
-            need_new_slot = true;
-            // By default, capture into the slot
-            self.capture(&mut slot)?;
+            // Capture into buf
+            self.capture(&mut capture_buf)?;
             self.processed += 1;
             // Then, we get the count
-            let this_count = count(&slot);
+            let this_count = count(&capture_buf);
             // Send away the stats if the time has come (non blocking)
             if last_stats.elapsed() >= stats_polling_time {
-                if let Ok(mut send) = stats_send.try_send_ref() {
-                    *send = Stats {
-                        drops: self.drops,
-                        processed: self.processed,
-                    };
-                }
+                let _ = stats_send.try_send(Stats {
+                    drops: self.drops,
+                    processed: self.processed,
+                });
                 last_stats = Instant::now();
             }
             // Check first payload
@@ -185,10 +143,11 @@ impl Capture {
                 self.next_expected_count = this_count + 1;
             } else if this_count == self.next_expected_count {
                 self.next_expected_count += 1;
+                // And send
+                payload_sender.send(capture_buf)?;
             } else if this_count < self.next_expected_count {
                 // If the packet is from the past, we drop it
                 self.drops += 1;
-                need_new_slot = false;
             } else if this_count > self.next_expected_count + BACKLOG_BUFFER_PAYLOADS as u64 {
                 warn!(
                     "Futuristic payload, jumping forward. Gap size - {}",
@@ -197,29 +156,26 @@ impl Capture {
                 // The current payload is far enough in the future that we need to skip ahead
                 loop {
                     if let Some(pl) = self.backlog.remove(&self.next_expected_count) {
-                        (**slot).clone_from(&pl);
+                        payload_sender.send(pl)?;
                     } else {
                         // Send zeros in the place of this payload
-                        (**slot).clone_from(&[0u8; PAYLOAD_SIZE]);
-                        (**slot)[0..8].clone_from_slice(&self.next_expected_count.to_be_bytes());
+                        let mut pl = [0u8; PAYLOAD_SIZE];
+                        pl[0..8].clone_from_slice(&self.next_expected_count.to_be_bytes());
+                        payload_sender.send(capture_buf)?;
                         self.drops += 1;
                     }
                     self.next_expected_count += 1;
-                    slot = payload_sender.send_ref()?;
                     if self.next_expected_count == this_count {
                         break;
                     }
                 }
-                need_new_slot = false;
             } else {
                 // This packet is from the future, store it
-                self.backlog.insert(this_count, **slot);
+                self.backlog.insert(this_count, capture_buf);
                 // But before we do that, we could potentially drain stuff from the backlog
                 while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
-                    (**slot).clone_from(&pl);
+                    payload_sender.send(pl)?;
                     self.next_expected_count += 1;
-                    slot = payload_sender.send_ref()?;
-                    need_new_slot = false;
                 }
             }
         }
@@ -239,7 +195,7 @@ pub struct Stats {
 
 pub fn cap_task(
     port: u16,
-    cap_send: Sender<BoxedPayloadBytes, PayloadRecycle>,
+    cap_send: Sender<PayloadBytes>,
     stats_send: Sender<Stats>,
 ) -> anyhow::Result<()> {
     info!("Starting capture task!");
@@ -249,24 +205,23 @@ pub fn cap_task(
 
 // This task will decode incoming packets and send to the ringbuffer and downsample tasks
 pub fn decode_task(
-    from_cap: Receiver<BoxedPayloadBytes, PayloadRecycle>,
+    from_cap: Receiver<PayloadBytes>,
     to_split: Sender<Payload>,
 ) -> anyhow::Result<()> {
     info!("Starting decode");
     // Marker bool for packet 1 - everything following is ordered. We need this count number to work back out the actual time of the stream
     let mut first_packet = true;
     // Receive
-    while let Some(payload) = from_cap.recv_ref() {
-        // Grab block
-        let mut downsamp_ref = to_split.send_ref()?;
-        // Decode directly into block
-        *downsamp_ref = Payload::from_bytes(&**payload);
+    loop {
+        let payload = from_cap.recv()?;
+        // Decode
+        let pl = Payload::from_bytes(&payload);
         if first_packet {
-            FIRST_PACKET.store(downsamp_ref.count, Ordering::Relaxed);
+            FIRST_PACKET.store(pl.count, Ordering::Relaxed);
             first_packet = false;
         }
+        to_split.send(pl)?;
     }
-    Ok(())
 }
 
 pub fn split_task(
@@ -275,15 +230,9 @@ pub fn split_task(
     to_dumps: Sender<Payload>,
 ) -> anyhow::Result<()> {
     info!("Starting split");
-    while let Some(payload) = from_decode.recv_ref() {
-        // Grab block
-        let mut downsamp_ref = to_downsample.send_ref()?;
-        // Copy
-        downsamp_ref.clone_from(&payload);
-        //This one won't cause backpressure because that only will happen when we're doing IO
-        if let Ok(mut dump_ref) = to_dumps.try_send_ref() {
-            dump_ref.clone_from(&payload);
-        }
+    loop {
+        let pl = from_decode.recv()?;
+        to_downsample.send(pl)?;
+        let _ = to_dumps.try_send(pl);
     }
-    Ok(())
 }

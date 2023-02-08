@@ -1,9 +1,13 @@
 use clap::{Parser, Subcommand};
-use std::net::SocketAddr;
+use regex::Regex;
+use std::{net::SocketAddr, ops::RangeInclusive};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
+    /// CPU cores to which we'll build tasks. They should share a NUMA node.
+    #[arg(long, default_value = "8:15", value_parser = parse_core_range)]
+    pub core_range: RangeInclusive<usize>,
     /// Port which we expect packets to be directed to
     #[arg(long, default_value_t = 60000)]
     #[clap(value_parser = clap::value_parser!(u16).range(1..))]
@@ -57,4 +61,18 @@ pub enum Exfil {
 
 fn valid_dada_key(s: &str) -> Result<i32, String> {
     i32::from_str_radix(s, 16).map_err(|_| "Invalid hex litteral".to_string())
+}
+
+pub fn parse_core_range(input: &str) -> Result<RangeInclusive<usize>, String> {
+    let re = Regex::new(r"(\d+):(\d+)").unwrap();
+    let cap = re.captures(input).unwrap();
+    let start: usize = cap[1].parse().unwrap();
+    let stop: usize = cap[2].parse().unwrap();
+    if stop < start {
+        return Err("Invalid CPU range".to_owned());
+    }
+    if stop - start + 1 < 8 {
+        return Err("Not enough CPU cores".to_owned());
+    }
+    Ok(start..=stop)
 }

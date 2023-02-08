@@ -8,7 +8,7 @@ use psrdada::client::DadaClient;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::atomic::Ordering;
-use thingbuf::mpsc::Receiver;
+use thingbuf::mpsc::blocking::Receiver;
 
 // Set by hardware (in MHz)
 const _LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
@@ -28,13 +28,13 @@ fn heimdall_timestamp(time: &DateTime<Utc>) -> String {
 }
 
 /// A consumer that just grabs stokes off the channel and drops them
-pub async fn dummy_consumer(stokes_rcv: Receiver<Stokes>) -> anyhow::Result<()> {
+pub fn dummy_consumer(stokes_rcv: Receiver<Stokes>) -> anyhow::Result<()> {
     info!("Starting dummy consumer");
-    while stokes_rcv.recv().await.is_some() {}
+    while stokes_rcv.recv().is_some() {}
     Ok(())
 }
 
-pub async fn dada_consumer(
+pub fn dada_consumer(
     key: i32,
     stokes_rcv: Receiver<Stokes>,
     payload_start: DateTime<Utc>,
@@ -69,7 +69,7 @@ pub async fn dada_consumer(
         let mut block = data_writer.next().unwrap();
         loop {
             // Grab the next stokes parameters (already downsampled)
-            let mut stokes = match stokes_rcv.recv().await {
+            let mut stokes = match stokes_rcv.recv() {
                 Some(s) => s,
                 None => return Ok(()),
             };

@@ -17,7 +17,7 @@ use prometheus::{
 };
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use thingbuf::mpsc::Receiver;
+use thingbuf::mpsc::blocking::Receiver;
 use tokio::net::TcpListener;
 
 lazy_static! {
@@ -62,7 +62,7 @@ pub async fn metrics(
     Ok(resp)
 }
 
-pub async fn monitor_task(
+pub fn monitor_task(
     device: Device,
     stats: Receiver<Stats>,
     avg: Receiver<Stokes>,
@@ -70,7 +70,7 @@ pub async fn monitor_task(
     info!("Starting monitoring task!");
     loop {
         // Blocking here is ok, these are infrequent events
-        if let Some(stat) = stats.recv_ref().await {
+        if let Some(stat) = stats.recv_ref() {
             PACKET_GAUGE.set(stat.processed.try_into().unwrap());
             DROP_GAUGE.set(stat.drops.try_into().unwrap());
         } else {
@@ -79,7 +79,7 @@ pub async fn monitor_task(
         }
 
         //Then wait for spectrum
-        if let Some(avg_spec) = avg.recv_ref().await.as_deref() {
+        if let Some(avg_spec) = avg.recv_ref().as_deref() {
             // Update channel data
             for (i, v) in avg_spec.iter().enumerate() {
                 SPECTRUM_GAUGE

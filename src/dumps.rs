@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use hdf5::File;
 use log::{info, warn};
 use std::net::SocketAddr;
-use thingbuf::mpsc::{Receiver, Sender};
+use thingbuf::mpsc::blocking::{Receiver, Sender};
 use tokio::net::UdpSocket;
 
 pub struct DumpRing {
@@ -63,7 +63,6 @@ impl DumpRing {
     }
 }
 
-#[allow(clippy::missing_panics_doc)]
 pub async fn trigger_task(sender: Sender<()>, port: u16) -> anyhow::Result<()> {
     info!("Starting voltage ringbuffer trigger task!");
     // Create the socket
@@ -73,12 +72,11 @@ pub async fn trigger_task(sender: Sender<()>, port: u16) -> anyhow::Result<()> {
     let mut buf = [0; 10];
     loop {
         sock.recv_from(&mut buf).await?;
-        sender.send(()).await?;
+        sender.send(())?;
     }
 }
 
-#[allow(clippy::missing_panics_doc)]
-pub async fn dump_task(
+pub fn dump_task(
     mut ring: DumpRing,
     payload_reciever: Receiver<Payload>,
     signal_reciever: Receiver<()>,
@@ -95,7 +93,7 @@ pub async fn dump_task(
             }
         } else {
             // If we're not dumping, we're pushing data into the ringbuffer
-            if let Some(payload) = payload_reciever.recv_ref().await.as_deref() {
+            if let Some(payload) = payload_reciever.recv_ref().as_deref() {
                 let ring_ref = ring.next_push();
                 ring_ref.clone_from(payload);
             } else {

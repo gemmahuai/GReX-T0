@@ -3,6 +3,7 @@
 use crate::common::{Channel, Payload};
 use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
+use std::net::UdpSocket;
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -10,10 +11,9 @@ use std::{
     time::{Duration, Instant},
 };
 use thingbuf::{
-    mpsc::{Receiver, Sender},
+    mpsc::blocking::{Receiver, Sender},
     Recycle,
 };
-use tokio::net::UdpSocket;
 
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
 const WORD_SIZE: usize = 8;
@@ -128,8 +128,8 @@ impl Capture {
             }
             .into());
         }
-        // Replace the socket2 socket with a tokio socket
-        let sock = UdpSocket::from_std(socket.into())?;
+        // Replace the socket2 socket with a std socket
+        let sock = socket.into();
         Ok(Self {
             sock,
             backlog: HashMap::with_capacity(BACKLOG_BUFFER_PAYLOADS * 2),
@@ -140,8 +140,8 @@ impl Capture {
         })
     }
 
-    pub async fn capture(&mut self, buf: &mut PayloadBytes) -> anyhow::Result<()> {
-        let n = self.sock.recv(buf).await?;
+    pub fn capture(&mut self, buf: &mut PayloadBytes) -> anyhow::Result<()> {
+        let n = self.sock.recv(buf)?;
         if n != buf.len() {
             Err(Error::SizeMismatch(n).into())
         } else {
@@ -149,7 +149,7 @@ impl Capture {
         }
     }
 
-    pub async fn start(
+    pub fn start(
         &mut self,
         payload_sender: Sender<BoxedPayloadBytes, PayloadRecycle>,
         stats_send: Sender<Stats>,
@@ -157,18 +157,18 @@ impl Capture {
     ) -> anyhow::Result<()> {
         let mut last_stats = Instant::now();
         let mut need_new_slot = false;
-        let mut slot = payload_sender.send_ref().await?;
+        let mut slot = payload_sender.send_ref()?;
         loop {
             // Grab the next slot (conditionally)
             if need_new_slot {
-                slot = payload_sender.send_ref().await?;
+                slot = payload_sender.send_ref()?;
             }
             need_new_slot = true;
             // By default, capture into the slot
-            self.capture(&mut *slot).await?;
+            self.capture(&mut slot)?;
             self.processed += 1;
             // Then, we get the count
-            let this_count = count(&*slot);
+            let this_count = count(&slot);
             // Send away the stats if the time has come (non blocking)
             if last_stats.elapsed() >= stats_polling_time {
                 if let Ok(mut send) = stats_send.try_send_ref() {
@@ -205,7 +205,7 @@ impl Capture {
                         self.drops += 1;
                     }
                     self.next_expected_count += 1;
-                    slot = payload_sender.send_ref().await?;
+                    slot = payload_sender.send_ref()?;
                     if self.next_expected_count == this_count {
                         break;
                     }
@@ -218,7 +218,7 @@ impl Capture {
                 while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
                     (**slot).clone_from(&pl);
                     self.next_expected_count += 1;
-                    slot = payload_sender.send_ref().await?;
+                    slot = payload_sender.send_ref()?;
                     need_new_slot = false;
                 }
             }
@@ -237,18 +237,18 @@ pub struct Stats {
     pub processed: usize,
 }
 
-pub async fn cap_task(
+pub fn cap_task(
     port: u16,
     cap_send: Sender<BoxedPayloadBytes, PayloadRecycle>,
     stats_send: Sender<Stats>,
 ) -> anyhow::Result<()> {
     info!("Starting capture task!");
     let mut cap = Capture::new(port).unwrap();
-    cap.start(cap_send, stats_send, STATS_POLL_DURATION).await
+    cap.start(cap_send, stats_send, STATS_POLL_DURATION)
 }
 
 // This task will decode incoming packets and send to the ringbuffer and downsample tasks
-pub async fn decode_split_task(
+pub fn decode_split_task(
     from_cap: Receiver<BoxedPayloadBytes, PayloadRecycle>,
     to_downsample: Sender<Payload>,
     to_dumps: Sender<Payload>,
@@ -257,9 +257,9 @@ pub async fn decode_split_task(
     // Marker bool for packet 1 - everything following is ordered. We need this count number to work back out the actual time of the stream
     let mut first_packet = true;
     // Receive
-    while let Some(payload) = from_cap.recv_ref().await {
+    while let Some(payload) = from_cap.recv_ref() {
         // Grab block
-        let mut downsamp_ref = to_downsample.send_ref().await?;
+        let mut downsamp_ref = to_downsample.send_ref()?;
         // Decode directly into block
         *downsamp_ref = Payload::from_bytes(&**payload);
         // This one won't cause backpressure because that only will happen when we're doing IO

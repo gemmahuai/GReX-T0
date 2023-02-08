@@ -3,13 +3,13 @@
 use crate::common::{Payload, Stokes, CHANNELS};
 use log::info;
 use std::time::{Duration, Instant};
-use thingbuf::mpsc::{Receiver, Sender};
+use thingbuf::mpsc::blocking::{Receiver, Sender};
 
 /// How many packets before we send one off to monitor
 const MONITOR_CADENCE: Duration = Duration::from_secs(10);
 
 #[allow(clippy::missing_panics_doc)]
-pub async fn downsample_task(
+pub fn downsample_task(
     receiver: Receiver<Payload>,
     sender: Sender<Stokes>,
     monitor: Sender<Stokes>,
@@ -28,7 +28,7 @@ pub async fn downsample_task(
     let mut monitor_buf = vec![0f32; CHANNELS];
     let mut local_monitor_iters = 0;
 
-    while let Some(payload) = receiver.recv_ref().await.as_deref() {
+    while let Some(payload) = receiver.recv_ref().as_deref() {
         // Compute Stokes I
         let stokes = payload.stokes_i();
         // Add to both averaging bufs
@@ -47,7 +47,7 @@ pub async fn downsample_task(
         // Check for downsample exit condition
         if local_downsamp_iters == downsamp_iters {
             // Get a handle on the sender
-            let mut send_ref = sender.send_ref().await?;
+            let mut send_ref = sender.send_ref()?;
             // Write averages directly into it
             downsamp_buf
                 .iter_mut()

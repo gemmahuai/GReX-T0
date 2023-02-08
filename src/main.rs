@@ -31,8 +31,6 @@ where
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-    // Enable tokio console
-    console_subscriber::init();
     // Get the CLI options
     let cli = args::Cli::parse();
     // Get the CPU core range
@@ -48,10 +46,11 @@ async fn main() -> anyhow::Result<()> {
     // Setup the FPGA
     let mut device = Device::new(cli.fpga_addr, cli.requant_gain);
     let packet_start = device.trigger(&time_sync);
+    // Create a clone of the packet start time to hand off to the other thread
+    let psc = packet_start;
     if cli.trig {
         device.force_pps();
     }
-
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
     // Create channels to connect everything else
@@ -62,7 +61,6 @@ async fn main() -> anyhow::Result<()> {
     let (trig_s, trig_r) = warm_channel(5);
     let (stat_s, stat_r) = warm_channel(100);
     let (avg_s, avg_r) = warm_channel(100);
-
     // Start the threads
     macro_rules! thread_spawn {
             ($(($thread_name:literal, $fcall:expr)), +) => {
@@ -78,9 +76,6 @@ async fn main() -> anyhow::Result<()> {
                         .unwrap()}),+]
             };
         }
-
-    // Create a clone of the packet start time to hand off to the other thread
-    let psc = packet_start;
     // Spawn all the threads
     let handles = thread_spawn!(
         ("collect", monitoring::monitor_task(device, stat_r, avg_r)),

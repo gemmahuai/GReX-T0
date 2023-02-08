@@ -9,7 +9,7 @@ pub const CHANNELS: usize = 2048;
 /// How sure are we?
 pub const PACKET_CADENCE: f64 = 8.192e-6;
 
-pub type Stokes = [f32; CHANNELS];
+pub type Stokes = Vec<f32>;
 
 /// The complex number representing the value of a channel
 #[derive(Debug, Clone, Copy)]
@@ -40,7 +40,7 @@ pub type Channels = [Channel; CHANNELS];
 
 #[must_use]
 pub fn stokes_i(a: &Channels, b: &Channels) -> Stokes {
-    let mut stokes = [0f32; CHANNELS];
+    let mut stokes = vec![0f32; CHANNELS];
     for ((v, a), b) in stokes.iter_mut().zip(a).zip(b) {
         *v = f32::from(a.abs_squared() + b.abs_squared()) / f32::from(u16::MAX);
     }

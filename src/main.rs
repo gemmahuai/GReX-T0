@@ -33,28 +33,48 @@ macro_rules! thread_tasks {
     (($thread_name:literal,$core:literal),($(($task_name:literal,$invocation:expr)),+)) => {
         std::thread::Builder::new()
         .name($thread_name.to_string())
-        .spawn(move || -> anyhow::Result<()> {
+        .spawn(move || {
             if !core_affinity::set_for_current(CoreId { id: $core }) {
                 bail!("Couldn't set core affinity on thread {}", $thread_name);
             }
-            runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
-                let _ = try_join!($(tokio::task::Builder::new().name($task_name).spawn_local($invocation)?,)+)?;
-                Ok(())
-            })
-        })
+            Ok(runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?
+                .block_on(async move {
+                    tokio::task::LocalSet::new()
+                        .run_until(async move {
+                            let _ = try_join!($(tokio::task::Builder::new()
+                                .name($task_name)
+                                .spawn_local($invocation)
+                                .unwrap(),)+)
+                            .unwrap();
+                        })
+                        .await;
+                }))
+        })?
     };
     (($thread_name:literal,$core:literal),$invocation:expr) => {
         std::thread::Builder::new()
         .name($thread_name.to_string())
-        .spawn(move || -> anyhow::Result<()> {
+        .spawn(move || {
             if !core_affinity::set_for_current(CoreId { id: $core }) {
                 bail!("Couldn't set core affinity on thread {}", $thread_name);
             }
-            runtime::Builder::new_current_thread().enable_all().build()?.block_on(async {
-                let _ = try_join!(tokio::task::Builder::new().name($thread_name).spawn_local($invocation)?)?;
-                Ok(())
-            })
-        })
+            Ok(runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?
+                .block_on(async move {
+                    tokio::task::LocalSet::new()
+                        .run_until(async move {
+                            let _ = try_join!(tokio::task::Builder::new()
+                                .name($thread_name)
+                                .spawn_local($invocation)
+                                .unwrap())
+                            .unwrap();
+                        })
+                        .await;
+                }))
+        })?
     };
 }
 
@@ -97,7 +117,7 @@ fn main() -> anyhow::Result<()> {
             ("web_server", monitoring::start_web_server(cli.metrics_port)),
             ("dump_trig", dumps::trigger_task(trig_s, cli.trig_port))
         )
-    )?;
+    );
 
     // Exfil needs to be its own thread, because PSRDADA only has a blocking API, for god knows why
     // Create a clone of the packet start time to hand off to the other thread
@@ -107,17 +127,17 @@ fn main() -> anyhow::Result<()> {
             args::Exfil::Psrdada { key, samples } => thread_tasks!(
                 ("psrdada_exfil", 9),
                 exfil::dada_consumer(key, ex_r, psc, 2usize.pow(cli.downsample_power), samples)
-            )?,
+            ),
             args::Exfil::Filterbank => todo!(),
         },
-        None => thread_tasks!(("dummy_exfil", 9), exfil::dummy_consumer(ex_r))?,
+        None => thread_tasks!(("dummy_exfil", 9), exfil::dummy_consumer(ex_r)),
     };
 
     // Spawn the more timing critical tasks
     let decode_downsample = thread_tasks!(
         ("decode_split", 10),
         capture::decode_split_task(pb_r, ds_s, dump_s)
-    )?;
+    );
 
     let downsample = thread_tasks!(
         ("downsamp_dump", 11),
@@ -131,13 +151,13 @@ fn main() -> anyhow::Result<()> {
                 processing::downsample_task(ds_r, ex_s, avg_s, cli.downsample_power)
             )
         )
-    )?;
+    );
 
     // And then finally the capture task
     let capture_task = thread_tasks!(
         ("capture", 12),
         capture::cap_task(cli.cap_port, pb_s, stat_s)
-    )?;
+    );
 
     exfil.join().unwrap().unwrap();
     monitoring_tasks.join().unwrap().unwrap();

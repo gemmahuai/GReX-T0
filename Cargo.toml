@@ -26,12 +26,11 @@ socket2 = "0.4"
 tokio = { version = "1.15", features = ["full"] }
 thiserror = "1"
 core_affinity = "0.8"
-console-subscriber = "0.1"
 psrdada = "0.2"
 byte-slice-cast = "1"
-lending-iterator = "0.1.6"
-crossbeam-channel = "0.5.6"
-jemallocator = "0.3.2"
+lending-iterator = "0.1"
+crossbeam-channel = "0.5"
+jemallocator = "0.3"
 
 [lib]
 name = "grex_t0"

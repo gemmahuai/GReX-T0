@@ -9,5 +9,6 @@ pub mod common;
 pub mod dumps;
 pub mod exfil;
 pub mod fpga;
+pub mod injection;
 pub mod monitoring;
 pub mod processing;

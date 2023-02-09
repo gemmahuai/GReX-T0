@@ -154,21 +154,11 @@ impl Capture {
                     this_count - self.next_expected_count
                 );
                 // The current payload is far enough in the future that we need to skip ahead
-                loop {
-                    if let Some(pl) = self.backlog.remove(&self.next_expected_count) {
-                        payload_sender.send(pl.to_vec())?;
-                    } else {
-                        // Send zeros in the place of this payload
-                        let mut pl = vec![0u8; PAYLOAD_SIZE];
-                        pl[0..8].clone_from_slice(&self.next_expected_count.to_be_bytes());
-                        payload_sender.send(pl)?;
-                        self.drops += 1;
-                    }
-                    self.next_expected_count += 1;
-                    if self.next_expected_count == this_count {
-                        break;
-                    }
-                }
+                // It would take too long to send out all of the backlog, so we empty it immediately
+                self.drops += self.backlog.len();
+                self.backlog.clear();
+                payload_sender.send(capture_buf.clone())?;
+                self.next_expected_count = this_count + 1;
             } else {
                 // This packet is from the future, store it
                 self.backlog

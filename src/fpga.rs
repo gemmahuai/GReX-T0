@@ -10,7 +10,7 @@ use fixed::types::U32F0;
 use rsntp::SynchronizationResult;
 use std::net::SocketAddr;
 
-fpga_from_fpg!(GrexFpga, "gateware/grex_gateware_2023-02-06_1503.fpg");
+fpga_from_fpg!(GrexFpga, "gateware/grex_gateware_2023-02-09_1739.fpg");
 
 pub struct Device {
     pub fpga: GrexFpga<Tapcp>,
@@ -26,6 +26,9 @@ impl Device {
             fpga.transport.lock().unwrap().is_running().unwrap(),
             "SNAP board is not programmed/running"
         );
+        // Perform a master reset
+        fpga.master_rst.write(true);
+        fpga.master_rst.write(false);
         // Setup gain and requant factors
         fpga.requant_gain
             .write(&U32F0::from_num(requant_gain))
@@ -45,9 +48,8 @@ impl Device {
         let start_time = Utc.timestamp_opt(now.timestamp() + 2, 0).unwrap();
         std::thread::sleep((trigger_time - now).to_std().unwrap());
         // Send the trigger
-        self.fpga.master_rst.write(false).unwrap();
-        self.fpga.master_rst.write(true).unwrap();
-        self.fpga.master_rst.write(false).unwrap();
+        self.fpga.arm.write(true).unwrap();
+        self.fpga.arm.write(false).unwrap();
         // Update our time
         start_time
     }
@@ -55,7 +57,6 @@ impl Device {
     /// Force a PPS pulse (timing will be inaccurate)
     #[allow(clippy::missing_panics_doc)]
     pub fn force_pps(&mut self) {
-        self.fpga.pps_trig.write(false).unwrap();
         self.fpga.pps_trig.write(true).unwrap();
         self.fpga.pps_trig.write(false).unwrap();
     }

@@ -32,7 +32,10 @@ async fn main() -> anyhow::Result<()> {
     let client = SntpClient::new();
     let time_sync = client.synchronize(cli.ntp_addr).unwrap();
     // Setup the FPGA
+    info!("Setting up SNAP");
     let mut device = Device::new(cli.fpga_addr, cli.requant_gain);
+    device.reset()?;
+    device.start_networking()?;
     let packet_start = device.trigger(&time_sync);
     // Create a clone of the packet start time to hand off to the other thread
     let psc = packet_start;

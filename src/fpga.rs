@@ -1,5 +1,6 @@
 //! Control of the SNAP board running the gateware
 
+use anyhow::bail;
 use casperfpga::transport::{
     tapcp::{Platform, Tapcp},
     Transport,
@@ -8,7 +9,7 @@ use casperfpga_derive::fpga_from_fpg;
 use chrono::{DateTime, TimeZone, Utc};
 use fixed::types::U32F0;
 use rsntp::SynchronizationResult;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr};
 
 fpga_from_fpg!(GrexFpga, "gateware/grex_gateware_2023-02-09_1739.fpg");
 
@@ -26,15 +27,51 @@ impl Device {
             fpga.transport.lock().unwrap().is_running().unwrap(),
             "SNAP board is not programmed/running"
         );
-        // Perform a master reset
-        fpga.master_rst.write(true);
-        fpga.master_rst.write(false);
         // Setup gain and requant factors
         fpga.requant_gain
             .write(&U32F0::from_num(requant_gain))
             .unwrap();
         fpga.fft_shift.write(&U32F0::from_num(4095)).unwrap();
         Self { fpga }
+    }
+
+    /// Resets the state of the SNAP
+    pub fn reset(&mut self) -> anyhow::Result<()> {
+        self.fpga.master_rst.write(true);
+        self.fpga.master_rst.write(false);
+        Ok(())
+    }
+
+    /// Gets the 10 GbE data connection in working order
+    pub fn start_networking(&mut self) -> anyhow::Result<()> {
+        // FIXME, paramaterize
+        let dest_ip: Ipv4Addr = "192.168.0.1".parse()?;
+        let dest_mac = [0x98, 0xb7, 0x85, 0xa7, 0xec, 0x78];
+        let dest_port = 60000u16;
+        // Disable
+        self.fpga.tx_en.write(false)?;
+        self.fpga.gbe1.set_ip("192.168.0.20".parse()?)?;
+        self.fpga.gbe1.set_gateway(dest_ip)?;
+        self.fpga.gbe1.set_netmask("255.255.255.0".parse()?)?;
+        self.fpga.gbe1.set_port(dest_port)?;
+        self.fpga
+            .gbe1
+            .set_mac(&[0x02, 0x2E, 0x46, 0xE0, 0x64, 0xA1])?;
+        self.fpga.gbe1.set_enable(true)?;
+        self.fpga.gbe1.toggle_reset()?;
+        // Set destination registers
+        self.fpga.dest_port.write(&U32F0::from_num(dest_port))?;
+        self.fpga
+            .dest_ip
+            .write(&U32F0::from_num(u32::from(dest_ip)))?;
+        self.fpga.gbe1.set_single_arp_entry(dest_ip, &dest_mac)?;
+        // Turn on the core
+        self.fpga.tx_en.write(true)?;
+        // Check the link
+        if !self.fpga.gbe1_linkup.read()? {
+            bail!("10GbE Link Failed to come up");
+        }
+        Ok(())
     }
 
     /// Send a trigger pulse to start the flow of bytes, returning the true time of the start of packets

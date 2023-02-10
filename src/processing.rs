@@ -1,9 +1,10 @@
 //! Inter-thread processing (downsampling, etc)
 
 use crate::common::{Payload, Stokes, CHANNELS};
-use crossbeam_channel::{Receiver, Sender};
+use anyhow::anyhow;
 use log::info;
 use std::time::{Duration, Instant};
+use thingbuf::mpsc::blocking::{Receiver, Sender};
 
 /// How many packets before we send one off to monitor
 const MONITOR_CADENCE: Duration = Duration::from_secs(10);
@@ -29,7 +30,7 @@ pub fn downsample_task(
     let mut local_monitor_iters = 0;
 
     loop {
-        let payload = receiver.recv()?;
+        let payload = receiver.recv().ok_or_else(|| anyhow!("Channel closed"))?;
         // Compute Stokes I
         let stokes = payload.stokes_i();
         debug_assert_eq!(stokes.len(), CHANNELS);

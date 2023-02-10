@@ -1,7 +1,7 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
 use crate::common::{Channel, Payload};
-use crossbeam_channel::{Receiver, Sender};
+use anyhow::anyhow;
 use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
 use std::net::UdpSocket;
@@ -11,6 +11,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant},
 };
+use thingbuf::mpsc::blocking::{Receiver, Sender};
 
 /// FPGA UDP "Word" size (8 bytes as per CASPER docs)
 const WORD_SIZE: usize = 8;
@@ -207,7 +208,7 @@ pub fn decode_task(
     let mut first_packet = true;
     // Receive
     loop {
-        let payload = from_cap.recv()?;
+        let payload = from_cap.recv().ok_or_else(|| anyhow!("Channel closed"))?;
         // Decode
         let pl = Box::new(Payload::from_bytes(&payload));
         if first_packet {
@@ -225,7 +226,9 @@ pub fn split_task(
 ) -> anyhow::Result<()> {
     info!("Starting split");
     loop {
-        let pl = from_decode.recv()?;
+        let pl = from_decode
+            .recv()
+            .ok_or_else(|| anyhow!("Channel closed"))?;
         to_downsample.send(pl.clone())?;
         let _ = to_dumps.try_send(pl);
     }

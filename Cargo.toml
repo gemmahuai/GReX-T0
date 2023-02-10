@@ -29,8 +29,8 @@ core_affinity = "0.8"
 psrdada = "0.2"
 byte-slice-cast = "1"
 lending-iterator = "0.1"
-crossbeam-channel = "0.5"
 jemallocator = "0.3"
+thingbuf = "0.1"
 
 [lib]
 name = "grex_t0"

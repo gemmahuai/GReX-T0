@@ -1,7 +1,6 @@
 use anyhow::bail;
 pub use clap::Parser;
 use core_affinity::CoreId;
-use crossbeam_channel::bounded;
 use grex_t0::{
     args, capture,
     dumps::{self, DumpRing},
@@ -12,6 +11,7 @@ use grex_t0::{
 use jemallocator::Jemalloc;
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
+use thingbuf::mpsc::blocking::channel;
 use tokio::try_join;
 
 #[global_allocator]
@@ -46,14 +46,14 @@ async fn main() -> anyhow::Result<()> {
     let ring = DumpRing::new(cli.vbuf_power);
     // Create channels to connect everything else
     let fast_path_buffers = 1024; // At least a second of delay
-    let (pb_s, pb_r) = bounded(fast_path_buffers);
-    let (ds_s, ds_r) = bounded(fast_path_buffers);
-    let (ex_s, ex_r) = bounded(fast_path_buffers);
-    let (dump_s, dump_r) = bounded(fast_path_buffers);
-    let (split_s, split_r) = bounded(fast_path_buffers);
-    let (trig_s, trig_r) = bounded(5);
-    let (stat_s, stat_r) = bounded(100);
-    let (avg_s, avg_r) = bounded(100);
+    let (pb_s, pb_r) = channel(fast_path_buffers);
+    let (ds_s, ds_r) = channel(fast_path_buffers);
+    let (ex_s, ex_r) = channel(fast_path_buffers);
+    let (dump_s, dump_r) = channel(fast_path_buffers);
+    let (split_s, split_r) = channel(fast_path_buffers);
+    let (trig_s, trig_r) = channel(5);
+    let (stat_s, stat_r) = channel(100);
+    let (avg_s, avg_r) = channel(100);
 
     // Start the threads
     macro_rules! thread_spawn {

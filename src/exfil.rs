@@ -70,6 +70,7 @@ pub fn dada_consumer(
         loop {
             // Grab the next stokes parameters (already downsampled)
             let mut stokes = stokes_rcv.recv()?;
+            debug_assert_eq!(stokes.len(), CHANNELS);
             // Timestamp first one
             if first_payload {
                 first_payload = false;

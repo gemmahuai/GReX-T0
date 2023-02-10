@@ -37,8 +37,8 @@ impl Device {
 
     /// Resets the state of the SNAP
     pub fn reset(&mut self) -> anyhow::Result<()> {
-        self.fpga.master_rst.write(true);
-        self.fpga.master_rst.write(false);
+        self.fpga.master_rst.write(true)?;
+        self.fpga.master_rst.write(false)?;
         Ok(())
     }
 

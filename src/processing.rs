@@ -32,6 +32,7 @@ pub fn downsample_task(
         let payload = receiver.recv()?;
         // Compute Stokes I
         let stokes = payload.stokes_i();
+        debug_assert_eq!(stokes.len(), CHANNELS);
         // Add to averaging bufs
         downsamp_buf
             .iter_mut()

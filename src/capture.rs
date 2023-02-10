@@ -32,6 +32,8 @@ impl Payload {
     #[allow(clippy::cast_possible_wrap)]
     #[must_use]
     pub fn from_bytes(bytes: &[u8]) -> Self {
+        // Size hint
+        debug_assert_eq!(bytes.len(), PAYLOAD_SIZE);
         let mut payload = Payload::default();
         for (i, word) in bytes[TIMESTAMP_SIZE..].chunks_exact(WORD_SIZE).enumerate() {
             // Each word contains two frequencies for each polarization
@@ -175,6 +177,7 @@ impl Capture {
 
 /// Decode just the count from a byte array
 fn count(pl: &[u8]) -> Count {
+    debug_assert_eq!(pl.len(), PAYLOAD_SIZE);
     u64::from_be_bytes(pl[0..8].try_into().unwrap())
 }
 

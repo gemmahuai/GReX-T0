@@ -2,6 +2,7 @@
 
 use crate::common::{Channel, Payload};
 use anyhow::anyhow;
+use arrayvec::ArrayVec;
 use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
 use std::net::UdpSocket;
@@ -120,12 +121,12 @@ impl Capture {
 
     pub fn start(
         &mut self,
-        payload_sender: Sender<Vec<u8>>,
+        payload_sender: Sender<ArrayVec<u8, PAYLOAD_SIZE>>,
         stats_send: Sender<Stats>,
         stats_polling_time: Duration,
     ) -> anyhow::Result<()> {
         let mut last_stats = Instant::now();
-        let mut capture_buf = vec![0u8; PAYLOAD_SIZE];
+        let mut capture_buf = ArrayVec::<_, PAYLOAD_SIZE>::new();
         loop {
             // Capture into buf
             self.capture(&mut capture_buf[..])?;
@@ -165,10 +166,10 @@ impl Capture {
             } else {
                 // This packet is from the future, store it
                 self.backlog
-                    .insert(this_count, capture_buf.clone().try_into().unwrap());
+                    .insert(this_count, capture_buf.clone().into_inner().unwrap());
                 // But before we do that, we could potentially drain stuff from the backlog
                 while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
-                    payload_sender.send(pl.to_vec())?;
+                    payload_sender.send(pl.try_into().unwrap())?;
                     self.next_expected_count += 1;
                 }
             }
@@ -190,7 +191,7 @@ pub struct Stats {
 
 pub fn cap_task(
     port: u16,
-    cap_send: Sender<Vec<u8>>,
+    cap_send: Sender<ArrayVec<u8, PAYLOAD_SIZE>>,
     stats_send: Sender<Stats>,
 ) -> anyhow::Result<()> {
     info!("Starting capture task!");
@@ -200,7 +201,7 @@ pub fn cap_task(
 
 // This task will decode incoming packets and send to the ringbuffer and downsample tasks
 pub fn decode_task(
-    from_cap: Receiver<Vec<u8>>,
+    from_cap: Receiver<ArrayVec<u8, PAYLOAD_SIZE>>,
     to_split: Sender<Box<Payload>>,
 ) -> anyhow::Result<()> {
     info!("Starting decode");

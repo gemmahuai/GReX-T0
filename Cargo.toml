@@ -31,6 +31,7 @@ byte-slice-cast = "1"
 lending-iterator = "0.1"
 jemallocator = "0.3"
 thingbuf = "0.1"
+arrayvec = "0.7.2"
 
 [lib]
 name = "grex_t0"

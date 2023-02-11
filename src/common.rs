@@ -1,5 +1,6 @@
 //! Common types shared between tasks
 
+use arrayvec::ArrayVec;
 use chrono::{DateTime, Utc};
 use ndarray::{s, Array3, ArrayView};
 use num_complex::Complex;
@@ -9,7 +10,7 @@ pub const CHANNELS: usize = 2048;
 /// How sure are we?
 pub const PACKET_CADENCE: f64 = 8.192e-6;
 
-pub type Stokes = Vec<f32>;
+pub type Stokes = ArrayVec<f32, CHANNELS>;
 
 /// The complex number representing the value of a channel
 #[derive(Debug, Clone, Copy)]
@@ -40,9 +41,10 @@ pub type Channels = [Channel; CHANNELS];
 
 #[must_use]
 pub fn stokes_i(a: &Channels, b: &Channels) -> Stokes {
-    let mut stokes = vec![0f32; CHANNELS];
-    for ((v, a), b) in stokes.iter_mut().zip(a).zip(b) {
-        *v = f32::from(a.abs_squared() + b.abs_squared()) / f32::from(u16::MAX);
+    // This allocated uninit, so we gucci
+    let mut stokes = ArrayVec::new();
+    for (a, b) in a.iter().zip(b) {
+        stokes.push(f32::from(a.abs_squared() + b.abs_squared()) / f32::from(u16::MAX));
     }
     stokes
 }

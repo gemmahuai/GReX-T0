@@ -49,7 +49,7 @@ pub fn downsample_task(
             downsamp_buf
                 .iter_mut()
                 .for_each(|v| *v /= local_downsamp_iters as f32);
-            sender.send(downsamp_buf.to_vec())?;
+            sender.send(downsamp_buf.try_into().unwrap())?;
 
             // Then, use *this* average to save us some cycles for the monitoring
             monitor_buf
@@ -69,7 +69,7 @@ pub fn downsample_task(
                     .iter_mut()
                     .for_each(|v| *v /= local_monitor_iters as f32);
                 // Get a handle (non blocking) on the sender
-                monitor.send(monitor_buf.to_vec())?;
+                monitor.send(monitor_buf.try_into().unwrap())?;
                 // Reset averaging and timers
                 last_monitor = Instant::now();
                 monitor_buf.iter_mut().for_each(|v| *v = 0.0);

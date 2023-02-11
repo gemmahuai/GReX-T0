@@ -126,7 +126,7 @@ impl Capture {
         stats_polling_time: Duration,
     ) -> anyhow::Result<()> {
         let mut last_stats = Instant::now();
-        let mut capture_buf = ArrayVec::<_, PAYLOAD_SIZE>::new();
+        let mut capture_buf = [0u8; PAYLOAD_SIZE];
         loop {
             // Capture into buf
             self.capture(&mut capture_buf[..])?;
@@ -148,7 +148,7 @@ impl Capture {
             } else if this_count == self.next_expected_count {
                 self.next_expected_count += 1;
                 // And send
-                payload_sender.send(capture_buf.clone())?;
+                payload_sender.send(capture_buf.try_into().unwrap())?;
             } else if this_count < self.next_expected_count {
                 // If the packet is from the past, we drop it
                 self.drops += 1;
@@ -161,12 +161,11 @@ impl Capture {
                 // It would take too long to send out all of the backlog, so we empty it immediately
                 self.drops += self.backlog.len();
                 self.backlog.clear();
-                payload_sender.send(capture_buf.clone())?;
+                payload_sender.send(capture_buf.try_into().unwrap())?;
                 self.next_expected_count = this_count + 1;
             } else {
                 // This packet is from the future, store it
-                self.backlog
-                    .insert(this_count, capture_buf.clone().into_inner().unwrap());
+                self.backlog.insert(this_count, capture_buf);
                 // But before we do that, we could potentially drain stuff from the backlog
                 while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
                     payload_sender.send(pl.try_into().unwrap())?;
@@ -179,7 +178,6 @@ impl Capture {
 
 /// Decode just the count from a byte array
 fn count(pl: &[u8]) -> Count {
-    debug_assert_eq!(pl.len(), PAYLOAD_SIZE);
     u64::from_be_bytes(pl[0..8].try_into().unwrap())
 }
 

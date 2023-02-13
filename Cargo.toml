@@ -32,6 +32,8 @@ lending-iterator = "0.1"
 jemallocator = "0.3"
 thingbuf = "0.1"
 arrayvec = "0.7.2"
+sigproc_filterbank = "0.2.1"
+hifitime = "3.8.0"
 
 [lib]
 name = "grex_t0"

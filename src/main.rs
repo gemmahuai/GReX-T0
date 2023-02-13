@@ -6,7 +6,7 @@ use grex_t0::{
     dumps::{self, DumpRing},
     exfil,
     fpga::Device,
-    monitoring, processing,
+    injection, monitoring, processing,
 };
 use jemallocator::Jemalloc;
 use log::{info, LevelFilter};
@@ -44,13 +44,14 @@ async fn main() -> anyhow::Result<()> {
     }
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
-    // Create channels to connect everything else
-    let fast_path_buffers = 1024; // At least a second of delay
+    // Create channels to connect everything
+    let fast_path_buffers = 1024;
     let (pb_s, pb_r) = channel(fast_path_buffers);
     let (ds_s, ds_r) = channel(fast_path_buffers);
     let (ex_s, ex_r) = channel(fast_path_buffers);
     let (dump_s, dump_r) = channel(fast_path_buffers);
     let (split_s, split_r) = channel(fast_path_buffers);
+    let (inject_s, inject_r) = channel(fast_path_buffers);
     let (trig_s, trig_r) = channel(5);
     let (stat_s, stat_r) = channel(100);
     let (avg_s, avg_r) = channel(100);
@@ -73,9 +74,10 @@ async fn main() -> anyhow::Result<()> {
     // Spawn all the threads
     let handles = thread_spawn!(
         ("collect", monitoring::monitor_task(device, stat_r, avg_r)),
+        ("injection", injection::pulse_injection_task(inject_r, ex_s)),
         (
             "downsample",
-            processing::downsample_task(ds_r, ex_s, avg_s, cli.downsample_power)
+            processing::downsample_task(ds_r, inject_s, avg_s, cli.downsample_power)
         ),
         ("decode", capture::decode_task(pb_r, split_s)),
         ("split", capture::split_task(split_r, ds_s, dump_s,)),

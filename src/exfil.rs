@@ -3,16 +3,19 @@ use crate::common::{Stokes, CHANNELS, PACKET_CADENCE};
 use anyhow::anyhow;
 use byte_slice_cast::AsByteSlice;
 use chrono::{DateTime, Datelike, Timelike, Utc};
+use hifitime::{Epoch, TimeUnits, Unit};
 use lending_iterator::prelude::*;
 use log::{debug, info};
 use psrdada::client::DadaClient;
+use sigproc_filterbank::write::WriteFilterbank;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 use thingbuf::mpsc::blocking::Receiver;
 
 // Set by hardware (in MHz)
-const _LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
+const LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
 const BANDWIDTH: f64 = 250.0;
 
 /// Convert a chronno `DateTime` into a heimdall-compatible timestamp string
@@ -105,5 +108,42 @@ pub fn dada_consumer(
                 break;
             }
         }
+    }
+}
+
+/// Basically the same as the dada consumer, except write to a filterbank instead with no chunking
+pub fn filterbank_consumer(
+    stokes_rcv: Receiver<Stokes>,
+    payload_start: DateTime<Utc>,
+    downsample_factor: usize,
+) -> anyhow::Result<()> {
+    // Filename with ISO 8610 standard format
+    let filename = format!("grex-{}.h5", Utc::now().format("%Y%m%dT%H%M%S"));
+    // Create the file
+    let mut file = std::fs::File::create(filename)?;
+    // Create the filterbank context
+    let mut fb = WriteFilterbank::new(CHANNELS, 1);
+    // Setup the header stuff
+    fb.fch1 = Some(LOWBAND_MID_FREQ); // Start of band + half the step size
+    fb.foff = Some(BANDWIDTH / CHANNELS as f64);
+    fb.tsamp = Some(PACKET_CADENCE * downsample_factor as f64);
+    // We will capture the timestamp on the first packet
+    let mut first_payload = true;
+    loop {
+        // Grab next stokes
+        let stokes = stokes_rcv.recv().ok_or_else(|| anyhow!("Channel closed"))?;
+        // Timestamp first one
+        if first_payload {
+            first_payload = false;
+            let first_payload_time = payload_start
+                + chrono::Duration::from_std(std::time::Duration::from_secs_f64(
+                    PACKET_CADENCE * FIRST_PACKET.load(Ordering::Acquire) as f64,
+                ))?;
+            //    fb.tstart = Some(Epoch::try_from(first_payload_time).to_mjd_utc_days());
+            // Write out the header
+            file.write_all(&fb.header_bytes()).unwrap();
+        }
+        // Stream to FB
+        file.write_all(&fb.pack(&stokes))?;
     }
 }

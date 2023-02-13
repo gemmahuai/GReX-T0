@@ -13,7 +13,7 @@ const INJECTION_CADENCE: Duration = Duration::from_secs(10);
 pub fn pulse_injection_task(input: Receiver<Stokes>, output: Sender<Stokes>) -> anyhow::Result<()> {
     // Read the fake pulse file
     // FIXME - be more clever about the path
-    let bytes = std::fs::read("data/test_frb.dat")?;
+    let bytes = std::fs::read("/home/kiran/t0/data/test_frb.dat")?;
     // Create array of floats
     let floats = bytes[..].as_slice_of::<f64>()?;
     let time_samples = floats.len() / CHANNELS;

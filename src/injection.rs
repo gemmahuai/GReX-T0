@@ -36,7 +36,7 @@ pub fn pulse_injection_task(input: Receiver<Stokes>, output: Sender<Stokes>) -> 
             let this_sample = &floats[i * CHANNELS..(i + 1) * CHANNELS];
             // Add the current time slice of the fake pulse into the stream of real data
             for (i, source) in s.iter_mut().zip(this_sample) {
-                *i += *source as f32;
+                *i += *source as f32 * 10000.0;
             }
             i += 1;
             // If we've gone through all of it, stop.

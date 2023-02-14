@@ -33,6 +33,7 @@ thingbuf = "0.1"
 arrayvec = "0.7"
 sigproc_filterbank = "0.2"
 hifitime = "3"
+memmap2 = "0.5"
 
 [lib]
 name = "grex_t0"

@@ -7,7 +7,6 @@ edition = "2021"
 anyhow = "1"
 casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
 casperfpga_derive = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
-chrono = "0.4"
 clap = { version = "=4.0", features = ["derive"] }
 clap_lex = "=0.3.0"
 fixed = "1.21.0"
@@ -31,9 +30,9 @@ byte-slice-cast = "1"
 lending-iterator = "0.1"
 jemallocator = "0.3"
 thingbuf = "0.1"
-arrayvec = "0.7.2"
-sigproc_filterbank = "0.2.1"
-hifitime = "3.8.0"
+arrayvec = "0.7"
+sigproc_filterbank = "0.2"
+hifitime = "3"
 
 [lib]
 name = "grex_t0"

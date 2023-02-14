@@ -2,10 +2,10 @@
 
 use crate::common::{Payload, CHANNELS};
 use anyhow::anyhow;
-use chrono::{DateTime, Utc};
 use hdf5::File;
+use hifitime::prelude::*;
 use log::{info, warn};
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr};
 use thingbuf::mpsc::blocking::{Receiver, Sender};
 use tokio::net::UdpSocket;
 
@@ -32,9 +32,10 @@ impl DumpRing {
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
-    pub fn dump(&self, start_time: &DateTime<Utc>) -> anyhow::Result<()> {
+    pub fn dump(&self, start_time: &Epoch) -> anyhow::Result<()> {
         // Filename with ISO 8610 standard format
-        let filename = format!("grex_dump-{}.h5", Utc::now().format("%Y%m%dT%H%M%S"));
+        let fmt = Format::from_str("%Y%m%dT%H%M%S").unwrap();
+        let filename = format!("grex_dump-{}.h5", Formatter::new(Epoch::now()?, fmt));
         let file = File::create(filename)?;
         let ds = file
             .new_dataset::<i8>()
@@ -59,7 +60,7 @@ impl DumpRing {
         }
         // Set the time attribute
         let attr = ds.new_attr::<i64>().create("timestamp")?;
-        attr.write_scalar(&payload_time.timestamp_micros())?;
+        attr.write_scalar(&payload_time.to_mjd_utc_days())?;
         Ok(())
     }
 }
@@ -81,7 +82,7 @@ pub fn dump_task(
     mut ring: DumpRing,
     payload_reciever: Receiver<Box<Payload>>,
     signal_reciever: Receiver<()>,
-    start_time: DateTime<Utc>,
+    start_time: Epoch,
 ) -> anyhow::Result<()> {
     info!("Starting voltage ringbuffer fill task!");
     loop {

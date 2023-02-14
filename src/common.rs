@@ -1,7 +1,7 @@
 //! Common types shared between tasks
 
 use arrayvec::ArrayVec;
-use chrono::{DateTime, Utc};
+use hifitime::prelude::*;
 use ndarray::{s, Array3, ArrayView};
 use num_complex::Complex;
 
@@ -69,15 +69,10 @@ impl Default for Payload {
 
 impl Payload {
     /// Calculate the Stokes-I parameter for this payload
-    #[allow(clippy::missing_panics_doc)]
-    #[allow(clippy::cast_sign_loss)]
-    #[must_use]
     pub fn stokes_i(&self) -> Stokes {
         stokes_i(&self.pol_a, &self.pol_b)
     }
 
-    #[allow(clippy::missing_panics_doc)]
-    #[must_use]
     pub fn packed_pols(&self) -> (&[i8], &[i8]) {
         // # Safety
         // - Data is valid for reads of len as each pol has exactly CHANNELS * 2 bytes
@@ -100,8 +95,6 @@ impl Payload {
         (bytes_a, bytes_b)
     }
 
-    #[allow(clippy::missing_panics_doc)]
-    #[must_use]
     // ndarray of size [(pol_a,pol_b), CHANNELS, (re,im)]
     pub fn into_ndarray(&self) -> Array3<i8> {
         let mut buf = Array3::zeros((2, CHANNELS, 2));
@@ -114,13 +107,9 @@ impl Payload {
         buf
     }
 
-    #[allow(clippy::missing_panics_doc)]
-    #[allow(clippy::cast_precision_loss)]
-    #[must_use]
     /// Return the real UTC time of this packet
-    pub fn real_time(&self, start_time: &DateTime<Utc>) -> DateTime<Utc> {
-        let second_offset = self.count as f64 * PACKET_CADENCE;
-        *start_time
-            + chrono::Duration::from_std(std::time::Duration::from_secs_f64(second_offset)).unwrap()
+    pub fn real_time(&self, start_time: &Epoch) -> Epoch {
+        let second_offset = (self.count as f64 * PACKET_CADENCE).seconds();
+        *start_time + second_offset
     }
 }

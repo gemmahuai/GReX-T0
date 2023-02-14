@@ -2,16 +2,12 @@ use crate::capture::FIRST_PACKET;
 use crate::common::{Stokes, CHANNELS, PACKET_CADENCE};
 use anyhow::anyhow;
 use byte_slice_cast::AsByteSlice;
-use chrono::{DateTime, Datelike, Timelike, Utc};
-use hifitime::{Epoch, TimeUnits, Unit};
+use hifitime::prelude::*;
 use lending_iterator::prelude::*;
 use log::{debug, info};
 use psrdada::client::DadaClient;
 use sigproc_filterbank::write::WriteFilterbank;
-use std::collections::HashMap;
-use std::io::Write;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::{collections::HashMap, io::Write, str::FromStr, sync::atomic::Ordering};
 use thingbuf::mpsc::blocking::Receiver;
 
 // Set by hardware (in MHz)
@@ -19,16 +15,9 @@ const LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
 const BANDWIDTH: f64 = 250.0;
 
 /// Convert a chronno `DateTime` into a heimdall-compatible timestamp string
-fn heimdall_timestamp(time: &DateTime<Utc>) -> String {
-    format!(
-        "{}-{:02}-{:02}-{:02}:{:02}:{:02}",
-        time.year(),
-        time.month(),
-        time.day(),
-        time.hour(),
-        time.minute(),
-        time.second()
-    )
+fn heimdall_timestamp(time: &Epoch) -> String {
+    let fmt = Format::from_str("%Y-%m-%d-%H:%M:%S").unwrap();
+    format!("{}", Formatter::new(*time, fmt))
 }
 
 /// A consumer that just grabs stokes off the channel and drops them
@@ -41,7 +30,7 @@ pub fn dummy_consumer(stokes_rcv: Receiver<Stokes>) -> anyhow::Result<()> {
 pub fn dada_consumer(
     key: i32,
     stokes_rcv: Receiver<Stokes>,
-    payload_start: DateTime<Utc>,
+    payload_start: Epoch,
     downsample_factor: usize,
     window_size: usize,
 ) -> anyhow::Result<()> {
@@ -81,9 +70,7 @@ pub fn dada_consumer(
                 // The first payload we recieve will be payload #1 (as we armed and triggered)
                 // We'll compute the timestamp via the first payload count and the cadence
                 let first_payload_time = payload_start
-                    + chrono::Duration::from_std(std::time::Duration::from_secs_f64(
-                        PACKET_CADENCE * FIRST_PACKET.load(Ordering::Acquire) as f64,
-                    ))?;
+                    + (PACKET_CADENCE * FIRST_PACKET.load(Ordering::Acquire) as f64).seconds();
                 let timestamp_str = heimdall_timestamp(&first_payload_time);
                 header.insert("UTC_START".to_owned(), timestamp_str);
                 // Write the single header
@@ -114,11 +101,12 @@ pub fn dada_consumer(
 /// Basically the same as the dada consumer, except write to a filterbank instead with no chunking
 pub fn filterbank_consumer(
     stokes_rcv: Receiver<Stokes>,
-    payload_start: DateTime<Utc>,
+    payload_start: Epoch,
     downsample_factor: usize,
 ) -> anyhow::Result<()> {
     // Filename with ISO 8610 standard format
-    let filename = format!("grex-{}.h5", Utc::now().format("%Y%m%dT%H%M%S"));
+    let fmt = Format::from_str("%Y%m%dT%H%M%S").unwrap();
+    let filename = format!("grex-{}.fil", Formatter::new(Epoch::now()?, fmt));
     // Create the file
     let mut file = std::fs::File::create(filename)?;
     // Create the filterbank context
@@ -136,10 +124,8 @@ pub fn filterbank_consumer(
         if first_payload {
             first_payload = false;
             let first_payload_time = payload_start
-                + chrono::Duration::from_std(std::time::Duration::from_secs_f64(
-                    PACKET_CADENCE * FIRST_PACKET.load(Ordering::Acquire) as f64,
-                ))?;
-            //    fb.tstart = Some(Epoch::try_from(first_payload_time).to_mjd_utc_days());
+                + (PACKET_CADENCE * FIRST_PACKET.load(Ordering::Acquire) as f64).seconds();
+            fb.tstart = Some(first_payload_time.to_mjd_utc_days());
             // Write out the header
             file.write_all(&fb.header_bytes()).unwrap();
         }

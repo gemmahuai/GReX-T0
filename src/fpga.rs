@@ -6,8 +6,8 @@ use casperfpga::transport::{
     Transport,
 };
 use casperfpga_derive::fpga_from_fpg;
-use chrono::{DateTime, TimeZone, Utc};
 use fixed::types::U32F0;
+use hifitime::{prelude::*, UNIX_REF_EPOCH};
 use rsntp::SynchronizationResult;
 use std::net::{Ipv4Addr, SocketAddr};
 
@@ -76,19 +76,20 @@ impl Device {
 
     /// Send a trigger pulse to start the flow of bytes, returning the true time of the start of packets
     #[allow(clippy::missing_panics_doc)]
-    pub fn trigger(&mut self, time_sync: &SynchronizationResult) -> DateTime<Utc> {
+    pub fn trigger(&mut self, time_sync: &SynchronizationResult) -> anyhow::Result<Epoch> {
         // Get the current time, and wait to send the triggers to align the time with a rising PPS edge
-        let now: DateTime<Utc> = time_sync.datetime().try_into().unwrap();
-        // If we wait until halfway through the second, we have the maximum likleyhood of preventing a fencepost error
-        let trigger_time = Utc.timestamp_opt(now.timestamp() + 1, 500_000_000).unwrap();
+        let now = UNIX_REF_EPOCH + hifitime::Duration::from(time_sync.datetime().unix_timestamp()?);
+        let next_sec = now.ceil(1.seconds());
+        // If we wait a little past the second second, we have the maximum likleyhood of preventing a fencepost error
+        let trigger_time = next_sec + 0.1.seconds();
         // PPS will trigger on the next starting edge after we arm
-        let start_time = Utc.timestamp_opt(now.timestamp() + 2, 0).unwrap();
-        std::thread::sleep((trigger_time - now).to_std().unwrap());
+        let start_time = next_sec + 1.seconds();
+        std::thread::sleep((trigger_time - now).try_into().unwrap());
         // Send the trigger
         self.fpga.arm.write(true).unwrap();
         self.fpga.arm.write(false).unwrap();
         // Update our time
-        start_time
+        Ok(start_time)
     }
 
     /// Force a PPS pulse (timing will be inaccurate)

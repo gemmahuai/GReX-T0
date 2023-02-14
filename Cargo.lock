@@ -836,7 +836,6 @@ dependencies = [
  "byte-slice-cast",
  "casperfpga",
  "casperfpga_derive",
- "chrono",
  "clap 4.0.32",
  "clap_lex 0.3.0",
  "core_affinity",

@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use thingbuf::mpsc::blocking::{Receiver, Sender};
 
-fn read_pulse<'a>(pulse_mmap: &MMap) -> anyhow::Result<ArrayView2<f64>> {
+fn read_pulse(pulse_mmap: &Mmap) -> anyhow::Result<ArrayView2<f64>> {
     let floats = pulse_mmap[..].as_slice_of::<f64>()?;
     let time_samples = floats.len() / CHANNELS;
     let block = ArrayView::from_shape((CHANNELS, time_samples), floats)?;
@@ -40,7 +40,7 @@ pub fn pulse_injection_task(
         })
         .collect();
 
-    let mut pulse_cycle = pulses.into_iter().cycle();
+    let mut pulse_cycle = pulses.iter().cycle();
 
     info!("Starting pulse injection!");
 
@@ -49,8 +49,8 @@ pub fn pulse_injection_task(
     let mut last_injection = Instant::now();
 
     // State for current pulse
-    let mut current_pulse_path = pulse_cycle.next().unwrap();
-    let mut current_pulse = read_pulse(&current_pulse_path)?;
+    let mut current_mmap = unsafe { Mmap::map(&File::open(pulse_cycle.next().unwrap())?)? };
+    let mut current_pulse = read_pulse(&current_mmap)?;
 
     loop {
         // Grab stokes from downsample
@@ -71,6 +71,8 @@ pub fn pulse_injection_task(
             // If we've gone through all of it, stop and move to the next pulse
             if i == current_pulse.shape()[1] {
                 currently_injecting = false;
+                current_mmap = unsafe { Mmap::map(&File::open(pulse_cycle.next().unwrap())?)? };
+                current_pulse = read_pulse(&current_mmap)?;
             }
         }
         output.send(s)?;

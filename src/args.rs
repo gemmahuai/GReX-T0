@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use regex::Regex;
-use std::{net::SocketAddr, ops::RangeInclusive};
+use std::{net::SocketAddr, ops::RangeInclusive, path::PathBuf};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -37,9 +37,14 @@ pub struct Cli {
     #[arg(long)]
     pub trig: bool,
     /// Requantization gain
-    #[arg(long)]
     #[arg(long, default_value_t = 2)]
     pub requant_gain: u32,
+    /// Pulse injection cadence (seconds)
+    #[arg(short, long, default_value_t = 60)]
+    pub injection_cadence: u64,
+    /// Path to .dat files for pulse injection
+    #[arg(short, long, default_value = "./fake")]
+    pub pulse_path: PathBuf,
     /// Exfil method - leaving this unspecified will not save stokes data
     #[command(subcommand)]
     pub exfil: Option<Exfil>,
@@ -52,7 +57,7 @@ pub enum Exfil {
         /// Hex key
         #[clap(short, long, value_parser = valid_dada_key)]
         key: i32,
-        /// Window size
+        /// Window size in number of time samples
         #[clap(short, long, default_value_t = 65536)]
         samples: usize,
     },

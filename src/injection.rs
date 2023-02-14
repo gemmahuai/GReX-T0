@@ -6,12 +6,15 @@ use byte_slice_cast::AsSliceOf;
 use log::info;
 use ndarray::{s, ArrayView};
 use std::time::{Duration, Instant};
+use std::path::PathBuf;
 use thingbuf::mpsc::blocking::{Receiver, Sender};
 
-/// How often do we inject a fake pulse
-const INJECTION_CADENCE: Duration = Duration::from_secs(10);
-
-pub fn pulse_injection_task(input: Receiver<Stokes>, output: Sender<Stokes>) -> anyhow::Result<()> {
+pub fn pulse_injection_task(
+    input: Receiver<Stokes>,
+    output: Sender<Stokes>,
+    cadence: Duration,
+    pulse_path: PathBuf,
+) -> anyhow::Result<()> {
     // Read the fake pulse file
     // FIXME - be more clever about the path
     let bytes = std::fs::read("/home/kiran/t0/data/test_frb.dat")?;
@@ -30,7 +33,7 @@ pub fn pulse_injection_task(input: Receiver<Stokes>, output: Sender<Stokes>) -> 
     loop {
         // Grab stokes from downsample
         let mut s = input.recv().ok_or_else(|| anyhow!("Channel closed"))?;
-        if last_injection.elapsed() >= INJECTION_CADENCE {
+        if last_injection.elapsed() >= cadence {
             last_injection = Instant::now();
             currently_injecting = true;
             i = 0;
@@ -49,21 +52,5 @@ pub fn pulse_injection_task(input: Receiver<Stokes>, output: Sender<Stokes>) -> 
             }
         }
         output.send(s)?;
-    }
-}
-
-#[cfg(test)]
-pub mod test {
-    use super::*;
-
-    #[test]
-    fn test_read_file() {
-        let bytes = std::fs::read("data/test_frb.dat").unwrap();
-        // Create array of floats
-        let floats = bytes[..].as_slice_of::<f64>().unwrap();
-        for num in &floats[(2000 * 2048)..(2001 * 2048)] {
-            print!("{num:+e} ");
-        }
-        panic!()
     }
 }

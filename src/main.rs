@@ -11,6 +11,7 @@ use grex_t0::{
 use jemallocator::Jemalloc;
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
+use std::time::Duration;
 use thingbuf::mpsc::blocking::channel;
 use tokio::try_join;
 
@@ -74,7 +75,15 @@ async fn main() -> anyhow::Result<()> {
     // Spawn all the threads
     let handles = thread_spawn!(
         ("collect", monitoring::monitor_task(device, stat_r, avg_r)),
-        ("injection", injection::pulse_injection_task(inject_r, ex_s)),
+        (
+            "injection",
+            injection::pulse_injection_task(
+                inject_r,
+                ex_s,
+                Duration::from_secs(cli.injection_cadence),
+                cli.pulse_path
+            )
+        ),
         (
             "downsample",
             processing::downsample_task(ds_r, inject_s, avg_s, cli.downsample_power)

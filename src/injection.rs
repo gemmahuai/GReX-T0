@@ -4,10 +4,19 @@ use crate::common::{Stokes, CHANNELS};
 use anyhow::anyhow;
 use byte_slice_cast::AsSliceOf;
 use log::info;
-use ndarray::{s, ArrayView};
-use std::time::{Duration, Instant};
+use memmap2::Mmap;
+use ndarray::{s, ArrayView, ArrayView2};
+use std::fs::File;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 use thingbuf::mpsc::blocking::{Receiver, Sender};
+
+fn read_pulse<'a>(pulse_mmap: &MMap) -> anyhow::Result<ArrayView2<f64>> {
+    let floats = pulse_mmap[..].as_slice_of::<f64>()?;
+    let time_samples = floats.len() / CHANNELS;
+    let block = ArrayView::from_shape((CHANNELS, time_samples), floats)?;
+    Ok(block)
+}
 
 pub fn pulse_injection_task(
     input: Receiver<Stokes>,
@@ -15,20 +24,33 @@ pub fn pulse_injection_task(
     cadence: Duration,
     pulse_path: PathBuf,
 ) -> anyhow::Result<()> {
-    // Read the fake pulse file
-    // FIXME - be more clever about the path
-    let bytes = std::fs::read("/home/kiran/t0/data/test_frb.dat")?;
-    // Create array of floats
-    let floats = bytes[..].as_slice_of::<f64>()?;
-    let time_samples = floats.len() / CHANNELS;
+    // Grab all the .dat files in the given directory
+    let pulses: Vec<_> = std::fs::read_dir(pulse_path)?
+        .filter_map(|f| match f {
+            Ok(de) => {
+                let path = de.path();
+                let e = path.extension()?;
+                if e == "dat" {
+                    Some(path)
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        })
+        .collect();
 
-    let block = ArrayView::from_shape((CHANNELS, time_samples), floats)?;
+    let mut pulse_cycle = pulses.into_iter().cycle();
 
-    info!("Starting pulse injection. Pulse length is {time_samples} samples");
+    info!("Starting pulse injection!");
 
     let mut i = 0;
     let mut currently_injecting = false;
     let mut last_injection = Instant::now();
+
+    // State for current pulse
+    let mut current_pulse_path = pulse_cycle.next().unwrap();
+    let mut current_pulse = read_pulse(&current_pulse_path)?;
 
     loop {
         // Grab stokes from downsample
@@ -40,14 +62,14 @@ pub fn pulse_injection_task(
         }
         if currently_injecting {
             // Get the slice of fake pulse data
-            let this_sample = block.slice(s![.., i]);
+            let this_sample = current_pulse.slice(s![.., i]);
             // Add the current time slice of the fake pulse into the stream of real data
             for (i, source) in s.iter_mut().zip(this_sample) {
                 *i += *source as f32 * 10000.0;
             }
             i += 1;
-            // If we've gone through all of it, stop.
-            if i == time_samples {
+            // If we've gone through all of it, stop and move to the next pulse
+            if i == current_pulse.shape()[1] {
                 currently_injecting = false;
             }
         }

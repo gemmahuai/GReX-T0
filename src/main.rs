@@ -93,7 +93,8 @@ async fn main() -> anyhow::Result<()> {
                         2usize.pow(cli.downsample_power),
                         samples
                     ),
-                    args::Exfil::Filterbank => todo!(),
+                    args::Exfil::Filterbank =>
+                        exfil::filterbank_consumer(ex_r, psc, 2usize.pow(cli.downsample_power)),
                 },
                 None => exfil::dummy_consumer(ex_r),
             }

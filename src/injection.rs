@@ -65,7 +65,7 @@ pub fn pulse_injection_task(
             let this_sample = current_pulse.slice(s![.., i]);
             // Add the current time slice of the fake pulse into the stream of real data
             for (i, source) in s.iter_mut().zip(this_sample) {
-                *i += *source as f32 * 10000.0;
+                *i = *source as f32;
             }
             i += 1;
             // If we've gone through all of it, stop and move to the next pulse

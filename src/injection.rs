@@ -78,12 +78,6 @@ pub fn pulse_injection_task(
                 current_mmap = unsafe { Mmap::map(&File::open(pulse_cycle.next().unwrap())?)? };
                 current_pulse = read_pulse(&current_mmap)?;
             }
-        } else {
-            // FIXME REMOVE
-            s.iter_mut().for_each(|x| {
-                let samp: f32 = normal.sample(&mut rand::thread_rng());
-                *x = samp.powf(2.0)
-            });
         }
         output.send(s)?;
     }

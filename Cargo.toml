@@ -34,8 +34,7 @@ arrayvec = "0.7"
 sigproc_filterbank = "0.2"
 hifitime = "3"
 memmap2 = "0.5"
-rand = "0.8"
-rand_distr = "0.4.3"
+rand_distr = "0.4"
 
 [lib]
 name = "grex_t0"

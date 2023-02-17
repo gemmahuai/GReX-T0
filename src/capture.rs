@@ -23,7 +23,7 @@ const SPECTRA_SIZE: usize = 8192;
 /// Total UDP payload size
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 /// Maximum number of payloads we want in the backlog
-const BACKLOG_BUFFER_PAYLOADS: usize = 1024;
+const BACKLOG_BUFFER_PAYLOADS: usize = 16384;
 /// Polling interval for stats
 const STATS_POLL_DURATION: Duration = Duration::from_secs(10);
 /// Global atomic to hold the count of the first packet
@@ -226,9 +226,9 @@ pub fn split_task(
     info!("Starting split");
     loop {
         let pl = from_decode
-            .recv()
+            .recv_ref()
             .ok_or_else(|| anyhow!("Channel closed"))?;
         to_downsample.send(pl.clone())?;
-        let _ = to_dumps.try_send(pl);
+        let _ = to_dumps.try_send(pl.clone());
     }
 }

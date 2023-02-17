@@ -58,7 +58,7 @@ pub fn pulse_injection_task(
 
     loop {
         // Grab stokes from downsample
-        let mut s = input.recv().ok_or_else(|| anyhow!("Channel closed"))?;
+        let mut s = input.recv_ref().ok_or_else(|| anyhow!("Channel closed"))?;
         if last_injection.elapsed() >= cadence {
             last_injection = Instant::now();
             currently_injecting = true;
@@ -79,6 +79,6 @@ pub fn pulse_injection_task(
                 current_pulse = read_pulse(&current_mmap)?;
             }
         }
-        output.send(s)?;
+        output.send(s.clone())?;
     }
 }

@@ -30,7 +30,9 @@ pub fn downsample_task(
     let mut local_monitor_iters = 0;
 
     loop {
-        let payload = receiver.recv().ok_or_else(|| anyhow!("Channel closed"))?;
+        let payload = receiver
+            .recv_ref()
+            .ok_or_else(|| anyhow!("Channel closed"))?;
         // Compute Stokes I
         let stokes = payload.stokes_i();
         debug_assert_eq!(stokes.len(), CHANNELS);

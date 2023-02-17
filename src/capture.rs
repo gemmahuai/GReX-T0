@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use arrayvec::ArrayVec;
 use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
+use std::hint::spin_loop;
 use std::net::UdpSocket;
 use std::{
     collections::HashMap,
@@ -98,6 +99,8 @@ impl Capture {
             }
             .into());
         }
+        // Set to non-blocking
+        socket.set_nonblocking(true)?;
         // Replace the socket2 socket with a std socket
         let sock = socket.into();
         Ok(Self {
@@ -111,7 +114,18 @@ impl Capture {
     }
 
     pub fn capture(&mut self, buf: &mut [u8]) -> anyhow::Result<()> {
-        let n = self.sock.recv(buf)?;
+        let n = loop {
+            match self.sock.recv(buf) {
+                Ok(n) => break n,
+                Err(e) => {
+                    if let Some(11) = e.raw_os_error() {
+                        continue;
+                    } else {
+                        return Err(e.into());
+                    }
+                }
+            }
+        };
         if n != buf.len() {
             Err(Error::SizeMismatch(n).into())
         } else {

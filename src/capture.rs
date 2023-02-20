@@ -5,7 +5,6 @@ use anyhow::anyhow;
 use arrayvec::ArrayVec;
 use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
-use std::hint::spin_loop;
 use std::net::UdpSocket;
 use std::{
     collections::HashMap,
@@ -24,7 +23,7 @@ const SPECTRA_SIZE: usize = 8192;
 /// Total UDP payload size
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 /// Maximum number of payloads we want in the backlog
-const BACKLOG_BUFFER_PAYLOADS: usize = 16384;
+const BACKLOG_BUFFER_PAYLOADS: usize = 512;
 /// Polling interval for stats
 const STATS_POLL_DURATION: Duration = Duration::from_secs(10);
 /// Global atomic to hold the count of the first packet
@@ -32,8 +31,6 @@ pub static FIRST_PACKET: AtomicU64 = AtomicU64::new(0);
 
 impl Payload {
     /// Construct a payload instance from a raw UDP payload
-    #[allow(clippy::cast_possible_wrap)]
-    #[must_use]
     pub fn from_bytes(bytes: &[u8]) -> Self {
         // Size hint
         debug_assert_eq!(bytes.len(), PAYLOAD_SIZE);

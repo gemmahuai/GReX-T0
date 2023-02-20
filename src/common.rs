@@ -16,20 +16,11 @@ pub type Stokes = ArrayVec<f32, CHANNELS>;
 #[derive(Debug, Clone, Copy)]
 pub struct Channel(Complex<i8>);
 
-impl Default for Channel {
-    fn default() -> Self {
-        Self(Complex { re: 0, im: 0 })
-    }
-}
-
 impl Channel {
-    #[must_use]
     pub fn new(re: i8, im: i8) -> Self {
         Self(Complex::new(re, im))
     }
 
-    #[allow(clippy::cast_sign_loss)]
-    #[must_use]
     pub fn abs_squared(&self) -> u16 {
         let r = i16::from(self.0.re);
         let i = i16::from(self.0.im);
@@ -39,7 +30,6 @@ impl Channel {
 
 pub type Channels = [Channel; CHANNELS];
 
-#[must_use]
 pub fn stokes_i(a: &Channels, b: &Channels) -> Stokes {
     // This allocated uninit, so we gucci
     let mut stokes = ArrayVec::new();
@@ -59,11 +49,8 @@ pub struct Payload {
 
 impl Default for Payload {
     fn default() -> Self {
-        Self {
-            count: Default::default(),
-            pol_a: [Channel::default(); CHANNELS],
-            pol_b: [Channel::default(); CHANNELS],
-        }
+        // Payload having a 0-bit pattern is valid
+        unsafe { std::mem::zeroed() }
     }
 }
 

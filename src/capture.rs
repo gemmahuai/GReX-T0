@@ -144,32 +144,53 @@ impl Capture {
             if self.first_payload {
                 self.first_payload = false;
                 self.next_expected_count = this_count + 1;
+                // And send the first one
+                payload_sender.send(ArrayVec::from(capture_buf))?;
             } else if this_count == self.next_expected_count {
                 self.next_expected_count += 1;
                 // And send
-                payload_sender.send(capture_buf.try_into().unwrap())?;
+                payload_sender.send(ArrayVec::from(capture_buf))?;
             } else if this_count < self.next_expected_count {
                 // If the packet is from the past, we drop it
+                warn!("Anachronistic payload, dropping packet");
                 self.drops += 1;
             } else if this_count > self.next_expected_count + BACKLOG_BUFFER_PAYLOADS as u64 {
-                warn!(
-                    "Futuristic payload, jumping forward. Gap size - {}",
-                    this_count - self.next_expected_count
-                );
-                // The current payload is far enough in the future that we need to skip ahead
-                // It would take too long to send out all of the backlog, so we empty it immediately
-                self.drops += self.backlog.len();
-                self.backlog.clear();
-                payload_sender.send(capture_buf.try_into().unwrap())?;
-                self.next_expected_count = this_count + 1;
-            } else {
-                // This packet is from the future, store it
-                self.backlog.insert(this_count, capture_buf);
-                // But before we do that, we could potentially drain stuff from the backlog
-                while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
-                    payload_sender.send(pl.try_into().unwrap())?;
-                    self.next_expected_count += 1;
+                let gap = this_count - self.next_expected_count;
+                if gap < 2 * BACKLOG_BUFFER_PAYLOADS as u64 {
+                    warn!(
+                        "Futuristic payload, jumping forward. Gap size - {}",
+                        this_count - self.next_expected_count
+                    );
+                    // The current payload is far enough in the future that we need to skip ahead
+                    // Before we do, though, drain the backlog, inserting dummy values for the missing chunks
+                    for i in self.next_expected_count..this_count {
+                        match self.backlog.remove(&i) {
+                            Some(p) => payload_sender.send(ArrayVec::from(p))?,
+                            None => {
+                                let mut dummy = ArrayVec::from([0u8; PAYLOAD_SIZE]);
+                                dummy[0..8].clone_from_slice(&i.to_be_bytes());
+                                payload_sender.send(dummy)?;
+                                self.drops += 1;
+                            }
+                        }
+                    }
+                } else {
+                    // If the gap is so far ahead that it will take more than the cadence time (plus the RX buffer latency)
+                    // to refill, something has gone horribly wrong and we need to reevaluate our purpose in life (and cause a resulting gap in the timestream)
+                    error!("Distant futuristic payload, starting over. This results in a gap in the timestream and shouldn't happen");
+                    self.drops += self.backlog.len();
+                    self.backlog.clear();
+                    payload_sender.send(ArrayVec::from(capture_buf))?;
+                    self.next_expected_count = this_count + 1;
                 }
+            } else {
+                // This packet is from the future, but not so far that we think we're off pace,so store it
+                self.backlog.insert(this_count, capture_buf);
+            }
+            // Always try to catch up with the backlog
+            while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
+                payload_sender.send(ArrayVec::from(pl))?;
+                self.next_expected_count += 1;
             }
         }
     }
@@ -225,9 +246,9 @@ pub fn split_task(
     info!("Starting split");
     loop {
         let pl = from_decode
-            .recv_ref()
+            .recv()
             .ok_or_else(|| anyhow!("Channel closed"))?;
         to_downsample.send(pl.clone())?;
-        let _ = to_dumps.try_send(pl.clone());
+        let _ = to_dumps.try_send(pl);
     }
 }

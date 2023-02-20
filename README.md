@@ -19,7 +19,7 @@ graph TD
 
     A -->|Capture Statistics| K[Monitoring Webserver]
     D -->|Spectrum integration| K
-  
+
     H[Program Entry Point] --> I[FPGA Control and timing]
     I --> J[Task spawning]
 ```
@@ -33,7 +33,7 @@ Usage: grex_t0 [OPTIONS] [COMMAND]
 
 Commands:
   psrdada     Use PSRDADA for exfil
-  filterbank  
+  filterbank
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -64,5 +64,5 @@ Options:
 ```
 
 ## TODO
-- Exfil to sigproc
+
 - fix gateware to support retriggering

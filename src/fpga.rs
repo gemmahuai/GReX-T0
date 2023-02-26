@@ -18,8 +18,6 @@ pub struct Device {
 }
 
 impl Device {
-    #[allow(clippy::missing_panics_doc)]
-    #[must_use]
     pub fn new(addr: SocketAddr, requant_gain: u32) -> Self {
         let fpga = GrexFpga::new(Tapcp::connect(addr, Platform::SNAP).expect("Connection failed"))
             .expect("Failed to build FPGA object");

@@ -1061,9 +1061,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "289cfdbf735dea222b0ec6a10224b4d9552c7662bb451d4589cbfda3d407d1a3"
+checksum = "7b75264b2003a3913f118d35c586e535293b3e22e41f074930762929d071e092"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -2064,9 +2064,9 @@ dependencies = [
 
 [[package]]
 name = "sigproc_filterbank"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8912373b70454daa1fd685b638dbd3a4d6bd687c5bdc1201eadd263c52c2e78b"
+checksum = "539541f0af0168e86f88cc9f66d9b427e0d35163a8bcb13526094035cc03d819"
 dependencies = [
  "nom",
  "thiserror",

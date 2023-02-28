@@ -234,7 +234,8 @@ pub fn decode_task(
             FIRST_PACKET.store(pl.count, Ordering::Relaxed);
             first_packet = false;
         }
-        to_split.send(pl)?;
+        let mut sender = to_split.send_ref()?;
+        *sender = pl;
     }
 }
 
@@ -248,7 +249,8 @@ pub fn split_task(
         let pl = from_decode
             .recv()
             .ok_or_else(|| anyhow!("Channel closed"))?;
-        to_downsample.send(pl.clone())?;
+        let mut sender = to_downsample.send_ref()?;
+        *sender = pl.clone();
         let _ = to_dumps.try_send(pl);
     }
 }

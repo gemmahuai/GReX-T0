@@ -29,7 +29,6 @@ async fn main() -> anyhow::Result<()> {
         .filter_level(LevelFilter::Info)
         .init();
     // Setup NTP
-    info!("Synchronizing time with NTP");
     let time_sync = if !cli.skip_ntp {
         // Setup NTP
         info!("Synchronizing time with NTP");

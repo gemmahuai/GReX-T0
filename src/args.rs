@@ -36,8 +36,11 @@ pub struct Cli {
     /// Force a pps trigger
     #[arg(long)]
     pub trig: bool,
+    /// Sync FPGA timing without NTP
+    #[arg(long)]
+    pub skip_ntp: bool,
     /// Requantization gain
-    #[arg(long, default_value_t = 2)]
+    #[arg(long, default_value_t = 4)]
     pub requant_gain: u32,
     /// Pulse injection cadence (seconds)
     #[arg(short, long, default_value_t = 60)]

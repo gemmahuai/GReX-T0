@@ -5,11 +5,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
-casperfpga_derive = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
+casperfpga = "0.1"
+casperfpga_derive = "0.1"
 clap = { version = "=4.0", features = ["derive"] }
 clap_lex = "=0.3.0"
-fixed = "1.21.0"
+fixed = "1"
 hdf5 = "0.8"
 http-body-util = "0.1.0-rc.2"
 hyper = { version = "1.0.0-rc.3", features = ["full"] }

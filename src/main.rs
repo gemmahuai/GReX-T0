@@ -30,14 +30,24 @@ async fn main() -> anyhow::Result<()> {
         .init();
     // Setup NTP
     info!("Synchronizing time with NTP");
-    let client = SntpClient::new();
-    let time_sync = client.synchronize(cli.ntp_addr).unwrap();
+    let time_sync = if !cli.skip_ntp {
+        // Setup NTP
+        info!("Synchronizing time with NTP");
+        let client = SntpClient::new();
+        Some(client.synchronize(cli.ntp_addr).unwrap())
+    } else {
+        None
+    };
     // Setup the FPGA
     info!("Setting up SNAP");
     let mut device = Device::new(cli.fpga_addr, cli.requant_gain);
     device.reset()?;
     device.start_networking()?;
-    let packet_start = device.trigger(&time_sync)?;
+    let packet_start = if !cli.skip_ntp {
+        device.trigger(&time_sync.unwrap())?
+    } else {
+        device.blind_trigger()?
+    };
     // Create a clone of the packet start time to hand off to the other thread
     let psc = packet_start;
     if cli.trig {

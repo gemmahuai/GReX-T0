@@ -12,9 +12,8 @@ use hyper::{Request, Response};
 use lazy_static::lazy_static;
 use log::{error, info, warn};
 use prometheus::{
-    linear_buckets, register_gauge, register_gauge_vec, register_histogram_vec, register_int_gauge,
-    register_int_gauge_vec, Encoder, Gauge, GaugeVec, HistogramVec, IntGauge, IntGaugeVec,
-    TextEncoder,
+    register_gauge, register_gauge_vec, register_int_gauge, register_int_gauge_vec, Encoder, Gauge,
+    GaugeVec, IntGauge, IntGaugeVec, TextEncoder,
 };
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -44,13 +43,8 @@ lazy_static! {
     .unwrap();
     static ref FPGA_TEMP: Gauge =
         register_gauge!("fpga_temp", "Internal FPGA temperature").unwrap();
-    static ref RAW_ADC_HIST: HistogramVec = register_histogram_vec!(
-        "raw_adc_hist",
-        "Histogram data for raw ADC counts",
-        &["polarization"],
-        linear_buckets(-127.0, 4.0, 256).unwrap()
-    )
-    .unwrap();
+    static ref ADC_RMS_GAUGE: GaugeVec =
+        register_gauge_vec!("adc_rms", "RMS value of raw adc values", &["channel"]).unwrap();
 }
 
 pub async fn metrics(
@@ -113,23 +107,25 @@ pub fn monitor_task(
             warn!("Error reading from FPGA");
         }
 
-        // Take a snapshot of ADC values and add to histogram
+        // Take a snapshot of ADC values and compute RMS value
         if device.fpga.adc_snap.arm().is_ok() && device.fpga.adc_snap.trigger().is_ok() {
             if let Ok(v) = device.fpga.adc_snap.read() {
+                let mut rms_a = 0.0;
+                let mut rms_b = 0.0;
+                let mut n = 0;
                 for chunk in v.chunks(4) {
-                    RAW_ADC_HIST
-                        .with_label_values(&["a"])
-                        .observe(f64::from(chunk[0] as i8));
-                    RAW_ADC_HIST
-                        .with_label_values(&["a"])
-                        .observe(f64::from(chunk[1] as i8));
-                    RAW_ADC_HIST
-                        .with_label_values(&["b"])
-                        .observe(f64::from(chunk[2] as i8));
-                    RAW_ADC_HIST
-                        .with_label_values(&["b"])
-                        .observe(f64::from(chunk[3] as i8));
+                    rms_a += f64::powi(f64::from(chunk[0] as i8), 2);
+                    rms_a += f64::powi(f64::from(chunk[1] as i8), 2);
+                    rms_b += f64::powi(f64::from(chunk[2] as i8), 2);
+                    rms_b += f64::powi(f64::from(chunk[3] as i8), 2);
+                    n += 2;
                 }
+                ADC_RMS_GAUGE
+                    .with_label_values(&["a"])
+                    .set(((1.0 / (n as f64)) * rms_a).sqrt());
+                ADC_RMS_GAUGE
+                    .with_label_values(&["b"])
+                    .set(((1.0 / (n as f64)) * rms_b).sqrt());
             } else {
                 warn!("Error reading ADC snapshot");
             }

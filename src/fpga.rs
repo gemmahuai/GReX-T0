@@ -6,7 +6,6 @@ use casperfpga::transport::{
     Transport,
 };
 use casperfpga_derive::fpga_from_fpg;
-use fixed::types::U32F0;
 use hifitime::{prelude::*, UNIX_REF_EPOCH};
 use rsntp::SynchronizationResult;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -26,10 +25,8 @@ impl Device {
             "SNAP board is not programmed/running"
         );
         // Setup gain and requant factors
-        fpga.requant_gain
-            .write(&U32F0::from_num(requant_gain))
-            .unwrap();
-        fpga.fft_shift.write(&U32F0::from_num(4095)).unwrap();
+        fpga.requant_gain.write(requant_gain.into()).unwrap();
+        fpga.fft_shift.write(4095u32.into()).unwrap();
         Self { fpga }
     }
 
@@ -58,10 +55,8 @@ impl Device {
         self.fpga.gbe1.set_enable(true)?;
         self.fpga.gbe1.toggle_reset()?;
         // Set destination registers
-        self.fpga.dest_port.write(&U32F0::from_num(dest_port))?;
-        self.fpga
-            .dest_ip
-            .write(&U32F0::from_num(u32::from(dest_ip)))?;
+        self.fpga.dest_port.write(dest_port.into())?;
+        self.fpga.dest_ip.write(u32::from(dest_ip).into())?;
         self.fpga.gbe1.set_single_arp_entry(dest_ip, &dest_mac)?;
         // Turn on the core
         self.fpga.tx_en.write(true)?;
@@ -77,6 +72,23 @@ impl Device {
     pub fn trigger(&mut self, time_sync: &SynchronizationResult) -> anyhow::Result<Epoch> {
         // Get the current time, and wait to send the triggers to align the time with a rising PPS edge
         let now = UNIX_REF_EPOCH + hifitime::Duration::from(time_sync.datetime().unix_timestamp()?);
+        let next_sec = now.ceil(1.seconds());
+        // If we wait a little past the second second, we have the maximum likleyhood of preventing a fencepost error
+        let trigger_time = next_sec + 0.1.seconds();
+        // PPS will trigger on the next starting edge after we arm
+        let start_time = next_sec + 1.seconds();
+        std::thread::sleep((trigger_time - now).try_into().unwrap());
+        // Send the trigger
+        self.fpga.arm.write(true).unwrap();
+        self.fpga.arm.write(false).unwrap();
+        // Update our time
+        Ok(start_time)
+    }
+
+    /// Send a trigger pulse to start the flow of bytes, without synchronizing against NTP
+    pub fn blind_trigger(&mut self) -> anyhow::Result<Epoch> {
+        // Get the current time, and wait to send the triggers to align the time with a rising PPS edge
+        let now = hifitime::Epoch::now()?;
         let next_sec = now.ceil(1.seconds());
         // If we wait a little past the second second, we have the maximum likleyhood of preventing a fencepost error
         let trigger_time = next_sec + 0.1.seconds();

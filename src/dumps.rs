@@ -6,7 +6,7 @@ use hdf5::File;
 use hifitime::prelude::*;
 use log::{info, warn};
 use std::{net::SocketAddr, str::FromStr};
-use thingbuf::mpsc::blocking::{Receiver, Sender};
+use thingbuf::mpsc::blocking::{Receiver, Sender, StaticReceiver};
 use tokio::net::UdpSocket;
 
 pub struct DumpRing {
@@ -80,7 +80,7 @@ pub async fn trigger_task(sender: Sender<()>, port: u16) -> anyhow::Result<()> {
 
 pub fn dump_task(
     mut ring: DumpRing,
-    payload_reciever: Receiver<Payload>,
+    payload_reciever: StaticReceiver<Payload>,
     signal_reciever: Receiver<()>,
     start_time: Epoch,
 ) -> anyhow::Result<()> {

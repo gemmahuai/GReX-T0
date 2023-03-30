@@ -3,6 +3,7 @@ pub use clap::Parser;
 use core_affinity::CoreId;
 use grex_t0::{
     args, capture,
+    common::Payload,
     dumps::{self, DumpRing},
     exfil,
     fpga::Device,
@@ -12,11 +13,17 @@ use jemallocator::Jemalloc;
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
 use std::time::Duration;
-use thingbuf::mpsc::blocking::channel;
+use thingbuf::mpsc::blocking::{channel, StaticChannel};
 use tokio::try_join;
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
+
+// Setup the static channels
+const FAST_PATH_CHANNEL_SIZE: usize = 1024;
+static CAPTURE_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
+static DOWNSAMP_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
+static DUMP_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -54,13 +61,16 @@ async fn main() -> anyhow::Result<()> {
     }
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
-    // Create channels to connect everything
-    let fast_path_buffers = 1024;
-    let (cap_s, cap_r) = channel(fast_path_buffers);
-    let (ds_s, ds_r) = channel(fast_path_buffers);
-    let (ex_s, ex_r) = channel(fast_path_buffers);
-    let (dump_s, dump_r) = channel(fast_path_buffers);
-    let (inject_s, inject_r) = channel(fast_path_buffers);
+
+    // Fast path channels
+    let (cap_s, cap_r) = CAPTURE_CHAN.split();
+    let (ds_s, ds_r) = DOWNSAMP_CHAN.split();
+    let (dump_s, dump_r) = DUMP_CHAN.split();
+    // These may not need to be static
+    let (ex_s, ex_r) = channel(FAST_PATH_CHANNEL_SIZE);
+    let (inject_s, inject_r) = channel(FAST_PATH_CHANNEL_SIZE);
+
+    // Less important channels, these don't have to be static
     let (trig_s, trig_r) = channel(5);
     let (stat_s, stat_r) = channel(100);
     let (avg_s, avg_r) = channel(100);

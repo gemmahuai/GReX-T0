@@ -29,7 +29,7 @@ psrdada = "0.2"
 byte-slice-cast = "1"
 lending-iterator = "0.1"
 jemallocator = "0.3"
-thingbuf = "0.1"
+thingbuf = { version = "0.1", features = ["static"] }
 arrayvec = "0.7"
 sigproc_filterbank = "0.3"
 hifitime = "3"

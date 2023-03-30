@@ -11,7 +11,7 @@ use std::{
     sync::atomic::AtomicU64,
     time::{Duration, Instant},
 };
-use thingbuf::mpsc::blocking::{Receiver, Sender};
+use thingbuf::mpsc::blocking::{Sender, StaticReceiver, StaticSender};
 
 /// Size of the packet count header
 const TIMESTAMP_SIZE: usize = 8;
@@ -91,7 +91,7 @@ impl Capture {
 
     pub fn start(
         &mut self,
-        payload_sender: Sender<Payload>,
+        payload_sender: StaticSender<Payload>,
         stats_send: Sender<Stats>,
         stats_polling_time: Duration,
     ) -> anyhow::Result<()> {
@@ -179,7 +179,7 @@ pub struct Stats {
 
 pub fn cap_task(
     port: u16,
-    cap_send: Sender<Payload>,
+    cap_send: StaticSender<Payload>,
     stats_send: Sender<Stats>,
 ) -> anyhow::Result<()> {
     info!("Starting capture task!");
@@ -188,9 +188,9 @@ pub fn cap_task(
 }
 
 pub fn split_task(
-    from_capture: Receiver<Payload>,
-    to_downsample: Sender<Payload>,
-    to_dumps: Sender<Payload>,
+    from_capture: StaticReceiver<Payload>,
+    to_downsample: StaticSender<Payload>,
+    to_dumps: StaticSender<Payload>,
 ) -> anyhow::Result<()> {
     info!("Starting split");
     loop {

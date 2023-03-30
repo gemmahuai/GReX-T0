@@ -40,16 +40,17 @@ pub fn stokes_i(a: &Channels, b: &Channels) -> Stokes {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[repr(C)]
 pub struct Payload {
     /// Number of packets since the first packet
     pub count: u64,
-    pub pol_a: [Channel; CHANNELS],
-    pub pol_b: [Channel; CHANNELS],
+    pub pol_a: Channels,
+    pub pol_b: Channels,
 }
 
 impl Default for Payload {
     fn default() -> Self {
-        // Payload having a 0-bit pattern is valid
+        // Safety: Payload having a 0-bit pattern is valid
         unsafe { std::mem::zeroed() }
     }
 }

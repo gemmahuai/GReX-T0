@@ -1,6 +1,6 @@
 [package]
 name = "grex_t0"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 
 [dependencies]
@@ -10,7 +10,7 @@ casperfpga_derive = "0.1"
 clap = { version = "=4.0", features = ["derive"] }
 clap_lex = "=0.3.0"
 fixed = "1"
-hdf5 = "0.8"
+hdf5 = { git = "https://github.com/mulimoen/hdf5-rust", branch = "feature/hdf5_1_14" }
 http-body-util = "0.1.0-rc.2"
 hyper = { version = "1.0.0-rc.3", features = ["full"] }
 lazy_static = "1.4"

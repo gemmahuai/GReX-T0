@@ -1,21 +1,18 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
-use crate::common::{Channel, Payload};
+use crate::common::Payload;
 use anyhow::anyhow;
-use arrayvec::ArrayVec;
 use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
 use std::net::UdpSocket;
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::AtomicU64,
     time::{Duration, Instant},
 };
 use thingbuf::mpsc::blocking::{Receiver, Sender};
 
-/// FPGA UDP "Word" size (8 bytes as per CASPER docs)
-const WORD_SIZE: usize = 8;
 /// Size of the packet count header
 const TIMESTAMP_SIZE: usize = 8;
 /// Total number of bytes in the spectra block of the UDP payload
@@ -29,31 +26,6 @@ const STATS_POLL_DURATION: Duration = Duration::from_secs(10);
 /// Global atomic to hold the count of the first packet
 pub static FIRST_PACKET: AtomicU64 = AtomicU64::new(0);
 
-impl Payload {
-    /// Construct a payload instance from a raw UDP payload
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        // Size hint
-        debug_assert_eq!(bytes.len(), PAYLOAD_SIZE);
-        let mut payload = Payload::default();
-        for (i, word) in bytes[TIMESTAMP_SIZE..].chunks_exact(WORD_SIZE).enumerate() {
-            // Each word contains two frequencies for each polarization
-            // [A1 B1 A2 B2]
-            // Where each channel is [Re Im] as FixedI8<7>
-            payload.pol_a[2 * i] = Channel::new(word[0] as i8, word[1] as i8);
-            payload.pol_a[2 * i + 1] = Channel::new(word[4] as i8, word[5] as i8);
-            payload.pol_b[2 * i] = Channel::new(word[2] as i8, word[3] as i8);
-            payload.pol_b[2 * i + 1] = Channel::new(word[6] as i8, word[7] as i8);
-        }
-        // Then unpack the timestamp/order
-        payload.count = u64::from_be_bytes(
-            bytes[0..TIMESTAMP_SIZE]
-                .try_into()
-                .expect("This is exactly 8 bytes"),
-        );
-        payload
-    }
-}
-
 #[derive(thiserror::Error, Debug)]
 /// Errors that can be produced from captures
 pub enum Error {
@@ -64,11 +36,10 @@ pub enum Error {
 }
 
 type Count = u64;
-pub type PayloadBytes = [u8; PAYLOAD_SIZE];
 
 pub struct Capture {
     sock: UdpSocket,
-    pub backlog: HashMap<Count, PayloadBytes>,
+    pub backlog: HashMap<Count, Payload>,
     pub drops: usize,
     pub processed: usize,
     first_payload: bool,
@@ -120,7 +91,7 @@ impl Capture {
 
     pub fn start(
         &mut self,
-        payload_sender: Sender<ArrayVec<u8, PAYLOAD_SIZE>>,
+        payload_sender: Sender<Payload>,
         stats_send: Sender<Stats>,
         stats_polling_time: Duration,
     ) -> anyhow::Result<()> {
@@ -129,9 +100,11 @@ impl Capture {
         loop {
             // Capture into buf
             self.capture(&mut capture_buf[..])?;
+            // Transmute into a payload
+            // Safety: We will always own the bytes, and the FPGA code ensures this is a valid thing to do
+            // Also, we've checked that we've captured exactly 8200 bytes, which is the size of the payload
+            let payload = unsafe { &*(capture_buf.as_ptr() as *const Payload) };
             self.processed += 1;
-            // Then, we get the count
-            let this_count = count(&capture_buf[..]);
             // Send away the stats if the time has come (non blocking)
             if last_stats.elapsed() >= stats_polling_time {
                 let _ = stats_send.try_send(Stats {
@@ -143,32 +116,34 @@ impl Capture {
             // Check first payload
             if self.first_payload {
                 self.first_payload = false;
-                self.next_expected_count = this_count + 1;
+                self.next_expected_count = payload.count + 1;
                 // And send the first one
-                payload_sender.send(ArrayVec::from(capture_buf))?;
-            } else if this_count == self.next_expected_count {
+                payload_sender.send(*payload)?;
+            } else if payload.count == self.next_expected_count {
                 self.next_expected_count += 1;
                 // And send
-                payload_sender.send(ArrayVec::from(capture_buf))?;
-            } else if this_count < self.next_expected_count {
+                payload_sender.send(*payload)?;
+            } else if payload.count < self.next_expected_count {
                 // If the packet is from the past, we drop it
                 warn!("Anachronistic payload, dropping packet");
                 self.drops += 1;
-            } else if this_count > self.next_expected_count + BACKLOG_BUFFER_PAYLOADS as u64 {
-                let gap = this_count - self.next_expected_count;
+            } else if payload.count > self.next_expected_count + BACKLOG_BUFFER_PAYLOADS as u64 {
+                let gap = payload.count - self.next_expected_count;
                 if gap < 2 * BACKLOG_BUFFER_PAYLOADS as u64 {
                     warn!(
                         "Futuristic payload, jumping forward. Gap size - {}",
-                        this_count - self.next_expected_count
+                        payload.count - self.next_expected_count
                     );
                     // The current payload is far enough in the future that we need to skip ahead
                     // Before we do, though, drain the backlog, inserting dummy values for the missing chunks
-                    for i in self.next_expected_count..this_count {
+                    for i in self.next_expected_count..payload.count {
                         match self.backlog.remove(&i) {
-                            Some(p) => payload_sender.send(ArrayVec::from(p))?,
+                            Some(p) => payload_sender.send(p)?,
                             None => {
-                                let mut dummy = ArrayVec::from([0u8; PAYLOAD_SIZE]);
-                                dummy[0..8].clone_from_slice(&i.to_be_bytes());
+                                let dummy = Payload {
+                                    count: i,
+                                    ..Default::default()
+                                };
                                 payload_sender.send(dummy)?;
                                 self.drops += 1;
                             }
@@ -180,25 +155,20 @@ impl Capture {
                     error!("Distant futuristic payload, starting over. This results in a gap in the timestream and shouldn't happen");
                     self.drops += self.backlog.len();
                     self.backlog.clear();
-                    payload_sender.send(ArrayVec::from(capture_buf))?;
-                    self.next_expected_count = this_count + 1;
+                    payload_sender.send(*payload)?;
+                    self.next_expected_count = payload.count + 1;
                 }
             } else {
                 // This packet is from the future, but not so far that we think we're off pace,so store it
-                self.backlog.insert(this_count, capture_buf);
+                self.backlog.insert(payload.count, *payload);
             }
             // Always try to catch up with the backlog
             while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
-                payload_sender.send(ArrayVec::from(pl))?;
+                payload_sender.send(pl)?;
                 self.next_expected_count += 1;
             }
         }
     }
-}
-
-/// Decode just the count from a byte array
-fn count(pl: &[u8]) -> Count {
-    u64::from_be_bytes(pl[0..8].try_into().unwrap())
 }
 
 #[derive(Debug, Clone, Default)]
@@ -209,7 +179,7 @@ pub struct Stats {
 
 pub fn cap_task(
     port: u16,
-    cap_send: Sender<ArrayVec<u8, PAYLOAD_SIZE>>,
+    cap_send: Sender<Payload>,
     stats_send: Sender<Stats>,
 ) -> anyhow::Result<()> {
     info!("Starting capture task!");
@@ -217,40 +187,18 @@ pub fn cap_task(
     cap.start(cap_send, stats_send, STATS_POLL_DURATION)
 }
 
-// This task will decode incoming packets and send to the ringbuffer and downsample tasks
-pub fn decode_task(
-    from_cap: Receiver<ArrayVec<u8, PAYLOAD_SIZE>>,
-    to_split: Sender<Box<Payload>>,
-) -> anyhow::Result<()> {
-    info!("Starting decode");
-    // Marker bool for packet 1 - everything following is ordered. We need this count number to work back out the actual time of the stream
-    let mut first_packet = true;
-    // Receive
-    loop {
-        let payload = from_cap.recv().ok_or_else(|| anyhow!("Channel closed"))?;
-        // Decode
-        let pl = Box::new(Payload::from_bytes(&payload));
-        if first_packet {
-            FIRST_PACKET.store(pl.count, Ordering::Relaxed);
-            first_packet = false;
-        }
-        let mut sender = to_split.send_ref()?;
-        *sender = pl;
-    }
-}
-
 pub fn split_task(
-    from_decode: Receiver<Box<Payload>>,
-    to_downsample: Sender<Box<Payload>>,
-    to_dumps: Sender<Box<Payload>>,
+    from_capture: Receiver<Payload>,
+    to_downsample: Sender<Payload>,
+    to_dumps: Sender<Payload>,
 ) -> anyhow::Result<()> {
     info!("Starting split");
     loop {
-        let pl = from_decode
+        let pl = from_capture
             .recv()
             .ok_or_else(|| anyhow!("Channel closed"))?;
         let mut sender = to_downsample.send_ref()?;
-        *sender = pl.clone();
+        *sender = pl;
         let _ = to_dumps.try_send(pl);
     }
 }

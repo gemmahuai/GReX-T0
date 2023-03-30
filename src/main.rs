@@ -56,11 +56,10 @@ async fn main() -> anyhow::Result<()> {
     let ring = DumpRing::new(cli.vbuf_power);
     // Create channels to connect everything
     let fast_path_buffers = 1024;
-    let (pb_s, pb_r) = channel(fast_path_buffers);
+    let (cap_s, cap_r) = channel(fast_path_buffers);
     let (ds_s, ds_r) = channel(fast_path_buffers);
     let (ex_s, ex_r) = channel(fast_path_buffers);
     let (dump_s, dump_r) = channel(fast_path_buffers);
-    let (split_s, split_r) = channel(fast_path_buffers);
     let (inject_s, inject_r) = channel(fast_path_buffers);
     let (trig_s, trig_r) = channel(5);
     let (stat_s, stat_r) = channel(100);
@@ -97,8 +96,7 @@ async fn main() -> anyhow::Result<()> {
             "downsample",
             processing::downsample_task(ds_r, inject_s, avg_s, cli.downsample_power)
         ),
-        ("decode", capture::decode_task(pb_r, split_s)),
-        ("split", capture::split_task(split_r, ds_s, dump_s,)),
+        ("split", capture::split_task(cap_r, ds_s, dump_s,)),
         ("dump", dumps::dump_task(ring, dump_r, trig_r, packet_start)),
         (
             "exfil",
@@ -117,7 +115,7 @@ async fn main() -> anyhow::Result<()> {
                 None => exfil::dummy_consumer(ex_r),
             }
         ),
-        ("capture", capture::cap_task(cli.cap_port, pb_s, stat_s))
+        ("capture", capture::cap_task(cli.cap_port, cap_s, stat_s))
     );
 
     let _ = try_join!(

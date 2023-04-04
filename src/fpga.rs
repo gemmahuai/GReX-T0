@@ -10,7 +10,7 @@ use hifitime::{prelude::*, UNIX_REF_EPOCH};
 use rsntp::SynchronizationResult;
 use std::net::{Ipv4Addr, SocketAddr};
 
-fpga_from_fpg!(GrexFpga, "gateware/grex_gateware_2023-03-29_1713.fpg");
+fpga_from_fpg!(GrexFpga, "gateware/grex_gateware.fpg");
 
 pub struct Device {
     pub fpga: GrexFpga<Tapcp>,

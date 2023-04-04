@@ -4,14 +4,14 @@ use crate::common::{Payload, Stokes, CHANNELS};
 use anyhow::anyhow;
 use log::info;
 use std::time::{Duration, Instant};
-use thingbuf::mpsc::blocking::{Receiver, Sender};
+use thingbuf::mpsc::blocking::{Sender, StaticReceiver};
 
-/// How many packets before we send one off to monitor
+/// How long before we send one off to monitor
 const MONITOR_CADENCE: Duration = Duration::from_secs(10);
 
 #[allow(clippy::missing_panics_doc)]
 pub fn downsample_task(
-    receiver: Receiver<Box<Payload>>,
+    receiver: StaticReceiver<Payload>,
     sender: Sender<Stokes>,
     monitor: Sender<Stokes>,
     downsample_power: u32,

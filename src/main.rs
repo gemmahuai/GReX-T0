@@ -3,6 +3,7 @@ pub use clap::Parser;
 use core_affinity::CoreId;
 use grex_t0::{
     args, capture,
+    common::Payload,
     dumps::{self, DumpRing},
     exfil,
     fpga::Device,
@@ -11,8 +12,14 @@ use grex_t0::{
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
 use std::time::Duration;
-use thingbuf::mpsc::blocking::channel;
+use thingbuf::mpsc::blocking::{channel, StaticChannel};
 use tokio::try_join;
+
+// Setup the static channels
+const FAST_PATH_CHANNEL_SIZE: usize = 1024;
+static CAPTURE_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
+static DOWNSAMP_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
+static DUMP_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
@@ -25,15 +32,24 @@ async fn main() -> anyhow::Result<()> {
         .filter_level(LevelFilter::Info)
         .init();
     // Setup NTP
-    info!("Synchronizing time with NTP");
-    let client = SntpClient::new();
-    let time_sync = client.synchronize(cli.ntp_addr).unwrap();
+    let time_sync = if !cli.skip_ntp {
+        // Setup NTP
+        info!("Synchronizing time with NTP");
+        let client = SntpClient::new();
+        Some(client.synchronize(cli.ntp_addr).unwrap())
+    } else {
+        None
+    };
     // Setup the FPGA
     info!("Setting up SNAP");
     let mut device = Device::new(cli.fpga_addr, cli.requant_gain);
     device.reset()?;
     device.start_networking()?;
-    let packet_start = device.trigger(&time_sync)?;
+    let packet_start = if !cli.skip_ntp {
+        device.trigger(&time_sync.unwrap())?
+    } else {
+        device.blind_trigger()?
+    };
     // Create a clone of the packet start time to hand off to the other thread
     let psc = packet_start;
     if cli.trig {
@@ -41,14 +57,16 @@ async fn main() -> anyhow::Result<()> {
     }
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
-    // Create channels to connect everything
-    let fast_path_buffers = 1024;
-    let (pb_s, pb_r) = channel(fast_path_buffers);
-    let (ds_s, ds_r) = channel(fast_path_buffers);
-    let (ex_s, ex_r) = channel(fast_path_buffers);
-    let (dump_s, dump_r) = channel(fast_path_buffers);
-    let (split_s, split_r) = channel(fast_path_buffers);
-    let (inject_s, inject_r) = channel(fast_path_buffers);
+
+    // Fast path channels
+    let (cap_s, cap_r) = CAPTURE_CHAN.split();
+    let (ds_s, ds_r) = DOWNSAMP_CHAN.split();
+    let (dump_s, dump_r) = DUMP_CHAN.split();
+    // These may not need to be static
+    let (ex_s, ex_r) = channel(FAST_PATH_CHANNEL_SIZE);
+    let (inject_s, inject_r) = channel(FAST_PATH_CHANNEL_SIZE);
+
+    // Less important channels, these don't have to be static
     let (trig_s, trig_r) = channel(5);
     let (stat_s, stat_r) = channel(100);
     let (avg_s, avg_r) = channel(100);
@@ -84,8 +102,7 @@ async fn main() -> anyhow::Result<()> {
             "downsample",
             processing::downsample_task(ds_r, inject_s, avg_s, cli.downsample_power)
         ),
-        ("decode", capture::decode_task(pb_r, split_s)),
-        ("split", capture::split_task(split_r, ds_s, dump_s,)),
+        ("split", capture::split_task(cap_r, ds_s, dump_s,)),
         ("dump", dumps::dump_task(ring, dump_r, trig_r, packet_start)),
         (
             "exfil",
@@ -104,7 +121,7 @@ async fn main() -> anyhow::Result<()> {
                 None => exfil::dummy_consumer(ex_r),
             }
         ),
-        ("capture", capture::cap_task(cli.cap_port, pb_s, stat_s))
+        ("capture", capture::cap_task(cli.cap_port, cap_s, stat_s))
     );
 
     let _ = try_join!(

@@ -1,18 +1,18 @@
 [package]
 name = "grex_t0"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 
 [dependencies]
 anyhow = "1"
-casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
-casperfpga_derive = { git = "https://github.com/kiranshila/casperfpga_rs", version = "0.1.0" }
+casperfpga = "0.1"
+casperfpga_derive = "0.1"
 clap = { version = "=4.0", features = ["derive"] }
 clap_lex = "=0.3.0"
-fixed = "1.21.0"
-hdf5 = "0.8"
+fixed = "1"
+hdf5 = { git = "https://github.com/mulimoen/hdf5-rust", branch = "feature/hdf5_1_14" }
 http-body-util = "0.1.0-rc.2"
-hyper = { version = "1.0.0-rc.2", features = ["full"] }
+hyper = { version = "1.0.0-rc.3", features = ["full"] }
 lazy_static = "1.4"
 log = "0.4"
 prometheus = "0.13"
@@ -28,9 +28,9 @@ core_affinity = "0.8"
 psrdada = "0.2"
 byte-slice-cast = "1"
 lending-iterator = "0.1"
-thingbuf = "0.1"
+thingbuf = { version = "0.1", features = ["static"] }
 arrayvec = "0.7"
-sigproc_filterbank = "0.2"
+sigproc_filterbank = "0.3"
 hifitime = "3"
 memmap2 = "0.5"
 rand_distr = "0.4"

@@ -8,15 +8,11 @@ use grex_t0::{
     fpga::Device,
     injection, monitoring, processing,
 };
-use jemallocator::Jemalloc;
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
 use std::time::Duration;
 use thingbuf::mpsc::blocking::channel;
 use tokio::try_join;
-
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {

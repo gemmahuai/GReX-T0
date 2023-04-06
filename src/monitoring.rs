@@ -124,6 +124,8 @@ pub fn monitor_task(
                 rms_b = ((1.0 / (n as f64)) * rms_b).sqrt();
                 ADC_RMS_GAUGE.with_label_values(&["a"]).set(rms_a);
                 ADC_RMS_GAUGE.with_label_values(&["b"]).set(rms_b);
+                println!("RMS A - {rms_a}");
+                println!("RMS B - {rms_b}");
             } else {
                 warn!("Error reading ADC snapshot");
             }

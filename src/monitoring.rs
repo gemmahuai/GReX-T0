@@ -120,12 +120,10 @@ pub fn monitor_task(
                     rms_b += f64::powi(f64::from(chunk[3] as i8), 2);
                     n += 2;
                 }
-                ADC_RMS_GAUGE
-                    .with_label_values(&["a"])
-                    .set(((1.0 / (n as f64)) * rms_a).sqrt());
-                ADC_RMS_GAUGE
-                    .with_label_values(&["b"])
-                    .set(((1.0 / (n as f64)) * rms_b).sqrt());
+                rms_a = ((1.0 / (n as f64)) * rms_a).sqrt();
+                rms_b = ((1.0 / (n as f64)) * rms_b).sqrt();
+                ADC_RMS_GAUGE.with_label_values(&["a"]).set(rms_a);
+                ADC_RMS_GAUGE.with_label_values(&["b"]).set(rms_b);
             } else {
                 warn!("Error reading ADC snapshot");
             }

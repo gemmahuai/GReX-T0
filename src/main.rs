@@ -18,7 +18,6 @@ use tokio::try_join;
 // Setup the static channels
 const FAST_PATH_CHANNEL_SIZE: usize = 1024;
 static CAPTURE_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
-static DOWNSAMP_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
 static DUMP_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
 
 #[tokio::main(flavor = "current_thread")]
@@ -60,7 +59,6 @@ async fn main() -> anyhow::Result<()> {
 
     // Fast path channels
     let (cap_s, cap_r) = CAPTURE_CHAN.split();
-    let (ds_s, ds_r) = DOWNSAMP_CHAN.split();
     let (dump_s, dump_r) = DUMP_CHAN.split();
     // These may not need to be static
     let (ex_s, ex_r) = channel(FAST_PATH_CHANNEL_SIZE);
@@ -100,9 +98,8 @@ async fn main() -> anyhow::Result<()> {
         ),
         (
             "downsample",
-            processing::downsample_task(ds_r, inject_s, avg_s, cli.downsample_power)
+            processing::downsample_task(cap_r, inject_s, dump_s, avg_s, cli.downsample_power)
         ),
-        ("split", capture::split_task(cap_r, ds_s, dump_s,)),
         ("dump", dumps::dump_task(ring, dump_r, trig_r, packet_start)),
         (
             "exfil",

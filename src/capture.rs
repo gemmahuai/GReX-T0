@@ -1,7 +1,6 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
 use crate::common::Payload;
-use anyhow::anyhow;
 use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
 use std::net::UdpSocket;
@@ -11,7 +10,7 @@ use std::{
     sync::atomic::AtomicU64,
     time::{Duration, Instant},
 };
-use thingbuf::mpsc::blocking::{Sender, StaticReceiver, StaticSender};
+use thingbuf::mpsc::blocking::{Sender, StaticSender};
 
 /// Size of the packet count header
 const TIMESTAMP_SIZE: usize = 8;
@@ -185,20 +184,4 @@ pub fn cap_task(
     info!("Starting capture task!");
     let mut cap = Capture::new(port).unwrap();
     cap.start(cap_send, stats_send, STATS_POLL_DURATION)
-}
-
-pub fn split_task(
-    from_capture: StaticReceiver<Payload>,
-    to_downsample: StaticSender<Payload>,
-    to_dumps: StaticSender<Payload>,
-) -> anyhow::Result<()> {
-    info!("Starting split");
-    loop {
-        let pl = from_capture
-            .recv()
-            .ok_or_else(|| anyhow!("Channel closed"))?;
-        let mut sender = to_downsample.send_ref()?;
-        *sender = pl;
-        let _ = to_dumps.try_send(pl);
-    }
 }

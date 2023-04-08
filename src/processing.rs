@@ -4,7 +4,7 @@ use crate::common::{Payload, Stokes, CHANNELS};
 use anyhow::anyhow;
 use log::info;
 use std::time::{Duration, Instant};
-use thingbuf::mpsc::blocking::{Sender, StaticReceiver};
+use thingbuf::mpsc::blocking::{Sender, StaticReceiver, StaticSender};
 
 /// How long before we send one off to monitor
 const MONITOR_CADENCE: Duration = Duration::from_secs(10);
@@ -13,6 +13,7 @@ const MONITOR_CADENCE: Duration = Duration::from_secs(10);
 pub fn downsample_task(
     receiver: StaticReceiver<Payload>,
     sender: Sender<Stokes>,
+    to_dumps: StaticSender<Payload>,
     monitor: Sender<Stokes>,
     downsample_power: u32,
 ) -> anyhow::Result<()> {
@@ -35,6 +36,8 @@ pub fn downsample_task(
             .ok_or_else(|| anyhow!("Channel closed"))?;
         // Compute Stokes I
         let stokes = payload.stokes_i();
+        // Send payload
+        to_dumps.send(*payload)?;
         debug_assert_eq!(stokes.len(), CHANNELS);
         // Add to averaging bufs
         downsamp_buf

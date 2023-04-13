@@ -10,10 +10,10 @@ More implementation details to come.
 
 ```mermaid
 graph TD
-    A[UDP Capture and\nStateful dynamic reordering] -->|8Gpbs| C[Payload Stream Split]
-    C -->|8Gpbs| D[Downsample]
-    C -->|8Gpbs| E[Voltage ringbuffer]
+    A[UDP Capture and\nStateful dynamic reordering]
+    A -->|8Gpbs| D[Downsample]
     D -->|2Gbps| F[Exfil]
+    D -->|8Gbps| E[Voltage ringbuffer]
     G[UDP Voltage dump triggering] --> E
 
     A -->|Capture Statistics| K[Monitoring Webserver]

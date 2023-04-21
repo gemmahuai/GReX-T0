@@ -59,8 +59,7 @@ impl Capture {
         socket.set_recv_buffer_size(sock_buf_size)?;
         // Check
         let current_buf_size = socket.recv_buffer_size()?;
-        // Two bytes off for some mysterious reason
-        if current_buf_size != sock_buf_size * 2 - 2 {
+        if current_buf_size != sock_buf_size * 2 {
             return Err(Error::SetRecvBufferFailed {
                 expected: sock_buf_size * 2,
                 found: current_buf_size,

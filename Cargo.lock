@@ -833,7 +833,6 @@ dependencies = [
  "casperfpga",
  "casperfpga_derive",
  "clap 4.0.32",
- "clap_lex 0.3.0",
  "core_affinity",
  "criterion",
  "fixed",

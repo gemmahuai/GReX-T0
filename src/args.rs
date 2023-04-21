@@ -6,7 +6,7 @@ use std::{net::SocketAddr, ops::RangeInclusive, path::PathBuf};
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
     /// CPU cores to which we'll build tasks. They should share a NUMA node.
-    #[arg(long, default_value = "8:15", value_parser = parse_core_range)]
+    #[arg(long, default_value = "0:7", value_parser = parse_core_range)]
     pub core_range: RangeInclusive<usize>,
     /// Port which we expect packets to be directed to
     #[arg(long, default_value_t = 60000)]
@@ -28,7 +28,7 @@ pub struct Cli {
     #[arg(long, short, default_value_t = 15)]
     pub vbuf_power: u32,
     /// Socket address of the SNAP Board
-    #[arg(long, default_value = "192.168.0.5:69")]
+    #[arg(long, default_value = "192.168.0.3:69")]
     pub fpga_addr: SocketAddr,
     /// NTP server to synchronize against
     #[arg(long, default_value = "time.google.com")]
@@ -43,7 +43,7 @@ pub struct Cli {
     #[arg(long, default_value_t = 4)]
     pub requant_gain: u32,
     /// Pulse injection cadence (seconds)
-    #[arg(short, long, default_value_t = 60)]
+    #[arg(short, long, default_value_t = 3600)]
     pub injection_cadence: u64,
     /// Path to .dat files for pulse injection
     #[arg(short, long, default_value = "./fake")]

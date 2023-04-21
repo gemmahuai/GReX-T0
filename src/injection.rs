@@ -26,7 +26,8 @@ pub fn pulse_injection_task(
     pulse_path: PathBuf,
 ) -> anyhow::Result<()> {
     // Grab all the .dat files in the given directory
-    let pulses: Vec<_> = std::fs::read_dir(pulse_path)?
+    let pulses: Vec<_> = std::fs::read_dir(pulse_path)
+        .unwrap()
         .filter_map(|f| match f {
             Ok(de) => {
                 let path = de.path();

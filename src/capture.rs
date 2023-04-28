@@ -57,8 +57,8 @@ impl Capture {
         // Set the buffer size to 1GiB (it will read as double, for some reason)
         let sock_buf_size = 256 * 1024 * 1024 * 4;
         socket.set_recv_buffer_size(sock_buf_size)?;
-        // Check
-        let current_buf_size = socket.recv_buffer_size()?;
+        // Check (mystery 2 byte difference)
+        let current_buf_size = socket.recv_buffer_size()? + 2;
         if current_buf_size != sock_buf_size * 2 {
             return Err(Error::SetRecvBufferFailed {
                 expected: sock_buf_size * 2,

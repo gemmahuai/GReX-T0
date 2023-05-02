@@ -36,7 +36,6 @@ impl Device {
         self.fpga.master_rst.write(false)?;
         Ok(())
     }
-
     /// Gets the 10 GbE data connection in working order
     pub fn start_networking(&mut self) -> anyhow::Result<()> {
         // FIXME, paramaterize

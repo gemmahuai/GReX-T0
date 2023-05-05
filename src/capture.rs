@@ -5,7 +5,6 @@ use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
 use std::net::UdpSocket;
 use std::{
-    collections::HashMap,
     net::SocketAddr,
     sync::atomic::AtomicU64,
     time::{Duration, Instant},
@@ -18,8 +17,6 @@ const TIMESTAMP_SIZE: usize = 8;
 const SPECTRA_SIZE: usize = 8192;
 /// Total UDP payload size
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
-/// Maximum number of payloads we want in the backlog
-const BACKLOG_BUFFER_PAYLOADS: usize = 512;
 /// Polling interval for stats
 const STATS_POLL_DURATION: Duration = Duration::from_secs(10);
 /// Global atomic to hold the count of the first packet
@@ -34,15 +31,19 @@ pub enum Error {
     SetRecvBufferFailed { expected: usize, found: usize },
 }
 
-type Count = u64;
-
 pub struct Capture {
+    /// The socket itself
     sock: UdpSocket,
-    pub backlog: HashMap<Count, Payload>,
+    /// How many packets we've dropped because the incoming one wasn't n+1
     pub drops: usize,
+    /// How many packets from the past we've recieved (indicating there was a shuffle somewhere)
+    pub shuffled: usize,
+    /// The number of packets we've actually processed
     pub processed: usize,
+    /// Marker bool for the first packet
     first_payload: bool,
-    next_expected_count: Count,
+    /// The next payload count we expect
+    next_expected_count: u64,
 }
 
 impl Capture {
@@ -70,9 +71,9 @@ impl Capture {
         let sock = socket.into();
         Ok(Self {
             sock,
-            backlog: HashMap::with_capacity(BACKLOG_BUFFER_PAYLOADS * 2),
             drops: 0,
             processed: 0,
+            shuffled: 0,
             first_payload: true,
             next_expected_count: 0,
         })
@@ -108,15 +109,16 @@ impl Capture {
                 let _ = stats_send.try_send(Stats {
                     drops: self.drops,
                     processed: self.processed,
+                    shuffled: self.shuffled,
                 });
                 last_stats = Instant::now();
             }
             // Check first payload
             if self.first_payload {
                 self.first_payload = false;
-                self.next_expected_count = payload.count + 1;
                 // And send the first one
                 payload_sender.send(*payload)?;
+                self.next_expected_count = payload.count + 1;
             } else if payload.count == self.next_expected_count {
                 self.next_expected_count += 1;
                 // And send
@@ -124,46 +126,23 @@ impl Capture {
             } else if payload.count < self.next_expected_count {
                 // If the packet is from the past, we drop it
                 warn!("Anachronistic payload, dropping packet");
-                self.drops += 1;
-            } else if payload.count > self.next_expected_count + BACKLOG_BUFFER_PAYLOADS as u64 {
-                let gap = payload.count - self.next_expected_count;
-                if gap < 2 * BACKLOG_BUFFER_PAYLOADS as u64 {
-                    warn!(
-                        "Futuristic payload, jumping forward. Gap size - {}",
-                        payload.count - self.next_expected_count
-                    );
-                    // The current payload is far enough in the future that we need to skip ahead
-                    // Before we do, though, drain the backlog, inserting dummy values for the missing chunks
-                    for i in self.next_expected_count..payload.count {
-                        match self.backlog.remove(&i) {
-                            Some(p) => payload_sender.send(p)?,
-                            None => {
-                                let dummy = Payload {
-                                    count: i,
-                                    ..Default::default()
-                                };
-                                payload_sender.send(dummy)?;
-                                self.drops += 1;
-                            }
-                        }
-                    }
-                } else {
-                    // If the gap is so far ahead that it will take more than the cadence time (plus the RX buffer latency)
-                    // to refill, something has gone horribly wrong and we need to reevaluate our purpose in life (and cause a resulting gap in the timestream)
-                    error!("Distant futuristic payload, starting over. This results in a gap in the timestream and shouldn't happen");
-                    self.drops += self.backlog.len();
-                    self.backlog.clear();
-                    payload_sender.send(*payload)?;
-                    self.next_expected_count = payload.count + 1;
-                }
+                self.shuffled += 1;
             } else {
-                // This packet is from the future, but not so far that we think we're off pace,so store it
-                self.backlog.insert(payload.count, *payload);
-            }
-            // Always try to catch up with the backlog
-            while let Some(pl) = self.backlog.remove(&self.next_expected_count) {
-                payload_sender.send(pl)?;
-                self.next_expected_count += 1;
+                // payload.count > self.next_expected_count
+                // Packets were dropped, fill in with zeros (hopefully not too many)
+                let drops = payload.count - self.next_expected_count;
+                warn!("Jump in packet count, dropping {} packets", drops);
+                for d in 0..drops {
+                    // Create the payload in it's place
+                    let pl = Payload {
+                        count: self.next_expected_count + d,
+                        ..Default::default()
+                    };
+                    // And send
+                    payload_sender.send(pl)?;
+                }
+                // And finally update the next expected
+                self.next_expected_count = payload.count + 1;
             }
         }
     }
@@ -173,6 +152,7 @@ impl Capture {
 pub struct Stats {
     pub drops: usize,
     pub processed: usize,
+    pub shuffled: usize,
 }
 
 pub fn cap_task(

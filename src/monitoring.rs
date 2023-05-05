@@ -33,6 +33,11 @@ lazy_static! {
         register_int_gauge!("processed_packets", "Number of packets we've processed").unwrap();
     static ref DROP_GAUGE: IntGauge =
         register_int_gauge!("dropped_packets", "Number of packets we've dropped").unwrap();
+    static ref SHUFFLED_GAUGE: IntGauge = register_int_gauge!(
+        "shuffled_packets",
+        "Number of packets that were out of order"
+    )
+    .unwrap();
     static ref FFT_OVFL_GAUGE: IntGauge =
         register_int_gauge!("fft_ovfl", "Counter of FFT overflows").unwrap();
     static ref REQUANT_OVFL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
@@ -72,6 +77,7 @@ pub fn monitor_task(
         let stat = stats.recv_ref().ok_or_else(|| anyhow!("Channel closed"))?;
         PACKET_GAUGE.set(stat.processed.try_into().unwrap());
         DROP_GAUGE.set(stat.drops.try_into().unwrap());
+        SHUFFLED_GAUGE.set(stat.drops.try_into().unwrap());
 
         // Update channel data
         let avg_spec = avg.recv_ref().ok_or_else(|| anyhow!("Channel closed"))?;

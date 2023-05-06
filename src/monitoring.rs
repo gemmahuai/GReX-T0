@@ -77,7 +77,7 @@ pub fn monitor_task(
         let stat = stats.recv_ref().ok_or_else(|| anyhow!("Channel closed"))?;
         PACKET_GAUGE.set(stat.processed.try_into().unwrap());
         DROP_GAUGE.set(stat.drops.try_into().unwrap());
-        SHUFFLED_GAUGE.set(stat.drops.try_into().unwrap());
+        SHUFFLED_GAUGE.set(stat.shuffled.try_into().unwrap());
 
         // Update channel data
         let avg_spec = avg.recv_ref().ok_or_else(|| anyhow!("Channel closed"))?;

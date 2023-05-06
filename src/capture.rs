@@ -151,6 +151,7 @@ impl Capture {
 }
 
 #[derive(Debug, Clone, Default)]
+/// Statistics we send to the monitoring thread
 pub struct Stats {
     pub drops: usize,
     pub processed: usize,

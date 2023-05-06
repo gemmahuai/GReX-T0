@@ -141,6 +141,8 @@ impl Capture {
                     // And send
                     payload_sender.send(pl)?;
                 }
+                // Increment our drops counter
+                self.drops += drops as usize;
                 // And finally update the next expected
                 self.next_expected_count = payload.count + 1;
             }

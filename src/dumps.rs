@@ -5,7 +5,11 @@ use anyhow::anyhow;
 use hdf5::File;
 use hifitime::prelude::*;
 use log::{info, warn};
-use std::{net::SocketAddr, str::FromStr};
+use std::{
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use thingbuf::mpsc::blocking::{Receiver, Sender, StaticReceiver};
 use tokio::net::UdpSocket;
 
@@ -32,11 +36,12 @@ impl DumpRing {
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
-    pub fn dump(&self, start_time: &Epoch) -> anyhow::Result<()> {
+    pub fn dump(&self, start_time: &Epoch, path: &Path) -> anyhow::Result<()> {
         // Filename with ISO 8610 standard format
         let fmt = Format::from_str("%Y%m%dT%H%M%S").unwrap();
         let filename = format!("grex_dump-{}.h5", Formatter::new(Epoch::now()?, fmt));
-        let file = File::create(filename)?;
+        let file_path = path.join(filename);
+        let file = File::create(file_path)?;
         let ds = file
             .new_dataset::<i8>()
             .chunk((1, 2, CHANNELS, 2))
@@ -83,13 +88,14 @@ pub fn dump_task(
     payload_reciever: StaticReceiver<Payload>,
     signal_reciever: Receiver<()>,
     start_time: Epoch,
+    path: PathBuf,
 ) -> anyhow::Result<()> {
     info!("Starting voltage ringbuffer fill task!");
     loop {
         // First check if we need to dump, as that takes priority
         if signal_reciever.try_recv().is_ok() {
             info!("Dumping ringbuffer");
-            match ring.dump(&start_time) {
+            match ring.dump(&start_time, &path) {
                 Ok(_) => (),
                 Err(e) => warn!("Error in dumping buffer - {}", e),
             }

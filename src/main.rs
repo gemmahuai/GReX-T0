@@ -100,7 +100,10 @@ async fn main() -> anyhow::Result<()> {
             "downsample",
             processing::downsample_task(cap_r, inject_s, dump_s, avg_s, cli.downsample_power)
         ),
-        ("dump", dumps::dump_task(ring, dump_r, trig_r, packet_start)),
+        (
+            "dump",
+            dumps::dump_task(ring, dump_r, trig_r, packet_start, cli.dump_path)
+        ),
         (
             "exfil",
             match cli.exfil {

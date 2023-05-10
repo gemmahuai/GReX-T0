@@ -1,7 +1,7 @@
 //! Inter-thread processing (downsampling, etc)
 
 use crate::common::{Payload, Stokes, CHANNELS};
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use log::info;
 use std::time::{Duration, Instant};
 use thingbuf::mpsc::blocking::{Sender, StaticReceiver, StaticSender};
@@ -36,8 +36,10 @@ pub fn downsample_task(
             .ok_or_else(|| anyhow!("Channel closed"))?;
         // Compute Stokes I
         let stokes = payload.stokes_i();
-        // Send payload
-        to_dumps.send(*payload)?;
+        // Send payload to dump (non-blocking)
+        if let Err(thingbuf::mpsc::errors::TrySendError::Closed(_)) = to_dumps.try_send(*payload) {
+            bail!("Channel closed")
+        }
         debug_assert_eq!(stokes.len(), CHANNELS);
         // Add to averaging bufs
         downsamp_buf

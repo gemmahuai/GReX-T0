@@ -44,7 +44,7 @@ pub struct Cli {
     pub skip_ntp: bool,
     /// Requantization gain
     #[arg(long, default_value_t = 4)]
-    pub requant_gain: u32,
+    pub requant_gain: u16,
     /// Pulse injection cadence (seconds)
     #[arg(short, long, default_value_t = 3600)]
     pub injection_cadence: u64,

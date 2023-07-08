@@ -9,7 +9,7 @@ casperfpga = "0.1"
 casperfpga_derive = "0.1"
 clap = { version = "4", features = ["derive"] }
 fixed = "1"
-hdf5 = "0.8"
+hdf5 = { git = "https://github.com/aldanor/hdf5-rust", branch = "master" }
 http-body-util = "0.1.0-rc.2"
 hyper = { version = "1.0.0-rc.3", features = ["full"] }
 lazy_static = "1.4"

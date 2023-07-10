@@ -4,6 +4,7 @@
 //#![warn(clippy::pedantic)]
 
 pub mod args;
+pub mod calibrate;
 pub mod capture;
 pub mod common;
 pub mod dumps;

@@ -2,7 +2,9 @@ use anyhow::bail;
 pub use clap::Parser;
 use core_affinity::CoreId;
 use grex_t0::{
-    args, capture,
+    args,
+    calibrate::calibrate,
+    capture,
     common::Payload,
     dumps::{self, DumpRing},
     exfil,
@@ -49,6 +51,9 @@ async fn main() -> anyhow::Result<()> {
     } else {
         device.blind_trigger()?
     };
+    // Perform the bandpass calibration routine
+    calibrate(&mut device);
+
     // Create a clone of the packet start time to hand off to the other thread
     let psc = packet_start;
     if cli.trig {

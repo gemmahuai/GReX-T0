@@ -41,6 +41,7 @@ impl Device {
         self.fpga.master_rst.write(false)?;
         Ok(())
     }
+
     /// Gets the 10 GbE data connection in working order
     pub fn start_networking(&mut self) -> anyhow::Result<()> {
         // FIXME, paramaterize
@@ -111,5 +112,22 @@ impl Device {
     pub fn force_pps(&mut self) {
         self.fpga.pps_trig.write(true).unwrap();
         self.fpga.pps_trig.write(false).unwrap();
+    }
+
+    /// Trigger a vector accumulation (pre-requant)
+    pub fn trigger_vacc(&mut self) {
+        self.fpga.vacc_trig.write(true).unwrap();
+        self.fpga.vacc_trig.write(false).unwrap();
+    }
+
+    /// Read both vector accumulations
+    pub fn read_vacc(&mut self) -> (Vec<u64>, Vec<u64>) {
+        // Read the spectra
+        let a = self.fpga.spec_a_vacc.read().unwrap();
+        let b = self.fpga.spec_b_vacc.read().unwrap();
+        // Cast both to u64 (as they are U0)
+        let a_cast = a.iter().map(|v| u64::from(*v)).collect();
+        let b_cast = b.iter().map(|v| u64::from(*v)).collect();
+        (a_cast, b_cast)
     }
 }

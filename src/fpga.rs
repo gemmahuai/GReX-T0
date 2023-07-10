@@ -27,7 +27,9 @@ impl Device {
         );
         // Setup gain and requant factors
         // Create vector of flat requant gains
-        let requant_gains = vec![requant_gain.into(); CHANNELS];
+        // Fixme nonsense channels
+
+        let requant_gains: Vec<_> = (0..CHANNELS as u16).map(|v| v.into()).collect();
         fpga.requant_gains.write(&requant_gains).unwrap();
         fpga.fft_shift.write(4095u32.into()).unwrap();
         Self { fpga }

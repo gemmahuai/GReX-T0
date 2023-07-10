@@ -30,7 +30,8 @@ impl Device {
         // Fixme nonsense channels
 
         let requant_gains: Vec<_> = (0..CHANNELS as u16).map(|v| v.into()).collect();
-        fpga.requant_gains.write(&requant_gains).unwrap();
+        fpga.requant_gains_a.write(&requant_gains).unwrap();
+        fpga.requant_gains_b.write(&requant_gains).unwrap();
         fpga.fft_shift.write(4095u32.into()).unwrap();
         Self { fpga }
     }

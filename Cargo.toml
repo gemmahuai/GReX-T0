@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-casperfpga = "0.1"
+casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", branch = "main" }
 casperfpga_derive = "0.1"
 clap = { version = "4", features = ["derive"] }
 fixed = "1"

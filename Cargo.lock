@@ -348,14 +348,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "casperfpga"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0da58d88a4f92db0d1fd2f7eb80335be08a1f1741edb7ddad01342973b4fbf3c"
+name = "casper_utils"
+version = "0.1.0"
+source = "git+https://github.com/kiranshila/casperfpga_rs?branch=main#133bed8c92c709bd86ecab5f41dd9df534691389"
 dependencies = [
  "anyhow",
- "casper_utils",
- "casperfpga_derive",
+ "flate2",
+ "kstring",
+ "md5",
+ "nom",
+]
+
+[[package]]
+name = "casperfpga"
+version = "0.1.1"
+source = "git+https://github.com/kiranshila/casperfpga_rs?branch=main#133bed8c92c709bd86ecab5f41dd9df534691389"
+dependencies = [
+ "anyhow",
+ "casper_utils 0.1.0 (git+https://github.com/kiranshila/casperfpga_rs?branch=main)",
+ "casperfpga_derive 0.1.1 (git+https://github.com/kiranshila/casperfpga_rs?branch=main)",
  "fixed",
  "indicatif",
  "kstring",
@@ -373,7 +384,19 @@ version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f55e8f9c860054b16c050f493cba224a5b88ceb05a64140d55671cdd41e11010"
 dependencies = [
- "casper_utils",
+ "casper_utils 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "kstring",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "casperfpga_derive"
+version = "0.1.1"
+source = "git+https://github.com/kiranshila/casperfpga_rs?branch=main#133bed8c92c709bd86ecab5f41dd9df534691389"
+dependencies = [
+ "casper_utils 0.1.0 (git+https://github.com/kiranshila/casperfpga_rs?branch=main)",
  "kstring",
  "proc-macro2",
  "quote",
@@ -879,7 +902,7 @@ dependencies = [
  "arrayvec",
  "byte-slice-cast",
  "casperfpga",
- "casperfpga_derive",
+ "casperfpga_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 4.3.11",
  "core_affinity",
  "criterion",
@@ -2165,8 +2188,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "tapcp"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "661285fd440d31b4529b5650d7d48aef652d5b8a0664c6b5d4975115cdfad0d2"
+source = "git+https://github.com/kiranshila/casperfpga_rs?branch=main#133bed8c92c709bd86ecab5f41dd9df534691389"
 dependencies = [
  "anyhow",
  "async-tftp",

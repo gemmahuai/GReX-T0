@@ -1,7 +1,7 @@
 //! Pre pipeline calibration routine
 
 use crate::fpga::Device;
-use std::fs;
+use std::{fs, time::Duration};
 
 fn write_to_file(data: &[u64], filename: &str) {
     fs::write(
@@ -18,6 +18,8 @@ pub fn calibrate(fpga: &mut Device) {
     // Assuming the fpga has been setup (but not adjusted in requant gains),
     // Trigger a pre-requant accumulation
     fpga.trigger_vacc();
+    // Wait for the accumulation to complete
+    std::thread::sleep(Duration::from_secs(5));
     // Then capture the spectrum
     let (a, b) = fpga.read_vacc();
     // FIXME write to file

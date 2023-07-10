@@ -125,6 +125,8 @@ impl Device {
         // Read the spectra
         let a = self.fpga.spec_a_vacc.read().unwrap();
         let b = self.fpga.spec_b_vacc.read().unwrap();
+        dbg!(&a);
+        dbg!(&b);
         // Cast both to u64 (as they are U0)
         let a_cast = a.iter().map(|v| u64::from(*v)).collect();
         let b_cast = b.iter().map(|v| u64::from(*v)).collect();

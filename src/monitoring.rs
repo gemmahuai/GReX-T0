@@ -9,6 +9,7 @@ use hyper::http::HeaderValue;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
+use hyper_util::rt::TokioIo;
 use lazy_static::lazy_static;
 use log::{error, info, warn};
 use prometheus::{
@@ -149,9 +150,10 @@ pub async fn start_web_server(metrics_port: u16) -> anyhow::Result<()> {
                 break;
             }
         };
+        let io = TokioIo::new(stream);
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
-                .serve_connection(stream, service_fn(metrics))
+                .serve_connection(io, service_fn(metrics))
                 .await
             {
                 println!("Error serving connection: {err:?}");

@@ -10,8 +10,9 @@ casperfpga_derive = "0.1"
 clap = { version = "4", features = ["derive"] }
 fixed = "1"
 hdf5 = { git = "https://github.com/aldanor/hdf5-rust", branch = "master" }
-http-body-util = "0.1.0-rc.2"
-hyper = { version = "1.0.0-rc.3", features = ["full"] }
+http-body-util = "0.1.0-rc.3"
+hyper = { version = "1.0.0-rc.4", features = ["full"] }
+hyper-util = { git = "https://github.com/hyperium/hyper-util.git" }
 lazy_static = "1.4"
 log = "0.4"
 prometheus = "0.13"
@@ -21,7 +22,7 @@ pretty_env_logger = "0.4"
 regex = "1"
 rsntp = "3"
 socket2 = "0.4"
-tokio = { version = "1.15", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
 thiserror = "1"
 core_affinity = "0.8"
 psrdada = "0.2"

@@ -3,13 +3,15 @@ pub use clap::Parser;
 use core_affinity::CoreId;
 use grex_t0::{
     args,
-    calibrate::calibrate,
+    //calibrate::calibrate,
     capture,
     common::Payload,
     dumps::{self, DumpRing},
     exfil,
     fpga::Device,
-    injection, monitoring, processing,
+    injection,
+    monitoring,
+    processing,
 };
 use log::{info, LevelFilter};
 use rsntp::SntpClient;
@@ -52,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
         device.blind_trigger()?
     };
     // Perform the bandpass calibration routine
-    calibrate(&mut device);
+    // calibrate(&mut device);
 
     // Create a clone of the packet start time to hand off to the other thread
     let psc = packet_start;
@@ -131,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
 
     let _ = try_join!(
         // Start the webserver
-        tokio::spawn(monitoring::start_web_server(cli.metrics_port)),
+        tokio::spawn(monitoring::start_web_server(cli.metrics_port)?),
         // Start the trigger watch
         tokio::spawn(dumps::trigger_task(trig_s, cli.trig_port))
     )?;

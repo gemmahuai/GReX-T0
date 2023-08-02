@@ -18,7 +18,7 @@ pub struct Device {
 }
 
 impl Device {
-    pub fn new(addr: SocketAddr, _requant_gain: u16) -> Self {
+    pub fn new(addr: SocketAddr, requant_gain: u16) -> Self {
         let fpga = GrexFpga::new(Tapcp::connect(addr, Platform::SNAP).expect("Connection failed"))
             .expect("Failed to build FPGA object");
         assert!(
@@ -27,9 +27,7 @@ impl Device {
         );
         // Setup gain and requant factors
         // Create vector of flat requant gains
-        // Fixme nonsense channels
-
-        let requant_gains: Vec<_> = (0..CHANNELS as u16).map(|v| v.into()).collect();
+        let requant_gains = [requant_gain.into(); CHANNELS];
         fpga.requant_gains_a.write(&requant_gains).unwrap();
         fpga.requant_gains_b.write(&requant_gains).unwrap();
         fpga.fft_shift.write(4095u32.into()).unwrap();

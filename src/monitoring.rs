@@ -1,25 +1,15 @@
 use crate::capture::Stats;
 use crate::common::Stokes;
 use crate::fpga::Device;
+use actix_web::{dev::Server, get, App, HttpResponse, HttpServer, Responder};
 use anyhow::anyhow;
-use http_body_util::Full;
-use hyper::body::Bytes;
-use hyper::header::CONTENT_TYPE;
-use hyper::http::HeaderValue;
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper::{Request, Response};
-use hyper_util::rt::TokioIo;
 use lazy_static::lazy_static;
-use log::{error, info, warn};
+use log::{info, warn};
 use prometheus::{
-    register_gauge, register_gauge_vec, register_int_gauge, register_int_gauge_vec, Encoder, Gauge,
+    register_gauge, register_gauge_vec, register_int_gauge, register_int_gauge_vec, Gauge,
     GaugeVec, IntGauge, IntGaugeVec, TextEncoder,
 };
-use std::convert::Infallible;
-use std::net::SocketAddr;
 use thingbuf::mpsc::blocking::Receiver;
-use tokio::net::TcpListener;
 
 lazy_static! {
     static ref CHANNEL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
@@ -53,18 +43,12 @@ lazy_static! {
         register_gauge_vec!("adc_rms", "RMS value of raw adc values", &["channel"]).unwrap();
 }
 
-pub async fn metrics(
-    _: Request<hyper::body::Incoming>,
-) -> Result<Response<Full<Bytes>>, Infallible> {
+#[get("/metrics")]
+async fn metrics() -> impl Responder {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let body_str = encoder.encode_to_string(&metric_families).unwrap();
-    let mut resp = Response::new(Full::new(body_str.into()));
-    resp.headers_mut().insert(
-        CONTENT_TYPE,
-        HeaderValue::from_str(encoder.format_type()).unwrap(),
-    );
-    Ok(resp)
+    HttpResponse::Ok().body(body_str)
 }
 
 pub fn monitor_task(
@@ -138,27 +122,9 @@ pub fn monitor_task(
     }
 }
 
-pub async fn start_web_server(metrics_port: u16) -> anyhow::Result<()> {
+pub fn start_web_server(metrics_port: u16) -> anyhow::Result<Server> {
     info!("Starting metrics webserver");
-    let addr = SocketAddr::from(([0, 0, 0, 0], metrics_port));
-    let listener = TcpListener::bind(addr).await?;
-    loop {
-        let stream = match listener.accept().await {
-            Ok((stream, _)) => stream,
-            Err(e) => {
-                error!("TCP accept error: {}", e);
-                break;
-            }
-        };
-        let io = TokioIo::new(stream);
-        tokio::task::spawn(async move {
-            if let Err(err) = http1::Builder::new()
-                .serve_connection(io, service_fn(metrics))
-                .await
-            {
-                println!("Error serving connection: {err:?}");
-            }
-        });
-    }
-    Ok(())
+    Ok(HttpServer::new(|| App::new().service(metrics))
+        .bind(("0.0.0.0", metrics_port))?
+        .run())
 }

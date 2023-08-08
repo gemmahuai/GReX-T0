@@ -43,9 +43,7 @@ impl Device {
 
     /// Gets the 10 GbE data connection in working order
     pub fn start_networking(&mut self) -> anyhow::Result<()> {
-        // FIXME, paramaterize
         let dest_ip: Ipv4Addr = "192.168.0.1".parse()?;
-        let dest_mac = [0x98, 0xb7, 0x85, 0xa7, 0xec, 0x78];
         let dest_port = 60000u16;
         // Disable
         self.fpga.tx_en.write(false)?;
@@ -53,6 +51,7 @@ impl Device {
         self.fpga.gbe1.set_gateway(dest_ip)?;
         self.fpga.gbe1.set_netmask("255.255.255.0".parse()?)?;
         self.fpga.gbe1.set_port(dest_port)?;
+        // Fixed in gateware
         self.fpga
             .gbe1
             .set_mac(&[0x02, 0x2E, 0x46, 0xE0, 0x64, 0xA1])?;
@@ -61,7 +60,9 @@ impl Device {
         // Set destination registers
         self.fpga.dest_port.write(dest_port.into())?;
         self.fpga.dest_ip.write(u32::from(dest_ip).into())?;
-        self.fpga.gbe1.set_single_arp_entry(dest_ip, &dest_mac)?;
+        self.fpga
+            .gbe1
+            .set_single_arp_entry(dest_ip, &[0, 0, 0, 0, 0, 0])?;
         // Turn on the core
         self.fpga.tx_en.write(true)?;
         // Check the link

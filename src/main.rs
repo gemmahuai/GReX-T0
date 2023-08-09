@@ -1,4 +1,3 @@
-use anyhow::bail;
 pub use clap::Parser;
 use core_affinity::CoreId;
 use grex_t0::{
@@ -25,7 +24,8 @@ static CAPTURE_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChan
 static DUMP_CHAN: StaticChannel<Payload, FAST_PATH_CHANNEL_SIZE> = StaticChannel::new();
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> eyre::Result<()> {
+    color_eyre::install()?;
     // Get the CLI options
     let cli = args::Cli::parse();
     // Get the CPU core range

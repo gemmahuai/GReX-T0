@@ -1,7 +1,7 @@
 //! Dumping voltage data
 
 use crate::common::{Payload, CHANNELS};
-use anyhow::anyhow;
+use eyre::eyre;
 use hdf5::File;
 use hifitime::prelude::*;
 use log::{info, warn};
@@ -36,7 +36,7 @@ impl DumpRing {
     }
 
     // Pack the ring into an array of [time, (pol_a, pol_b), channel, (re, im)]
-    pub fn dump(&self, start_time: &Epoch, path: &Path) -> anyhow::Result<()> {
+    pub fn dump(&self, start_time: &Epoch, path: &Path) -> eyre::Result<()> {
         // Filename with ISO 8610 standard format
         let fmt = Format::from_str("%Y%m%dT%H%M%S").unwrap();
         let filename = format!("grex_dump-{}.h5", Formatter::new(Epoch::now()?, fmt));
@@ -70,7 +70,7 @@ impl DumpRing {
     }
 }
 
-pub async fn trigger_task(sender: Sender<()>, port: u16) -> anyhow::Result<()> {
+pub async fn trigger_task(sender: Sender<()>, port: u16) -> eyre::Result<()> {
     info!("Starting voltage ringbuffer trigger task!");
     // Create the socket
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -89,7 +89,7 @@ pub fn dump_task(
     signal_reciever: Receiver<()>,
     start_time: Epoch,
     path: PathBuf,
-) -> anyhow::Result<()> {
+) -> eyre::Result<()> {
     info!("Starting voltage ringbuffer fill task!");
     loop {
         // First check if we need to dump, as that takes priority
@@ -103,7 +103,7 @@ pub fn dump_task(
             // If we're not dumping, we're pushing data into the ringbuffer
             let pl = payload_reciever
                 .recv_ref()
-                .ok_or_else(|| anyhow!("Channel closed"))?;
+                .ok_or_else(|| eyre!("Channel closed"))?;
             let ring_ref = ring.next_push();
             ring_ref.clone_from(&pl);
         }

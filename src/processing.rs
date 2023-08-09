@@ -1,7 +1,6 @@
 //! Inter-thread processing (downsampling, etc)
-
 use crate::common::{Payload, Stokes, CHANNELS};
-use anyhow::{anyhow, bail};
+use eyre::{bail, eyre};
 use log::info;
 use std::time::{Duration, Instant};
 use thingbuf::mpsc::blocking::{Sender, StaticReceiver, StaticSender};
@@ -16,7 +15,7 @@ pub fn downsample_task(
     to_dumps: StaticSender<Payload>,
     monitor: Sender<Stokes>,
     downsample_power: u32,
-) -> anyhow::Result<()> {
+) -> eyre::Result<()> {
     info!("Starting downsample");
 
     // We have two averaging states, one for the normal downsample process and one for monitoring
@@ -31,9 +30,7 @@ pub fn downsample_task(
     let mut local_monitor_iters = 0;
 
     loop {
-        let payload = receiver
-            .recv_ref()
-            .ok_or_else(|| anyhow!("Channel closed"))?;
+        let payload = receiver.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
         // Compute Stokes I
         let stokes = payload.stokes_i();
         // Send payload to dump (non-blocking)

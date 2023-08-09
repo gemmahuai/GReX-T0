@@ -1,7 +1,7 @@
 use crate::capture::FIRST_PACKET;
 use crate::common::{Stokes, CHANNELS, PACKET_CADENCE};
-use anyhow::anyhow;
 use byte_slice_cast::AsByteSlice;
+use eyre::eyre;
 use hifitime::prelude::*;
 use lending_iterator::prelude::*;
 use log::{debug, info};
@@ -21,7 +21,7 @@ fn heimdall_timestamp(time: &Epoch) -> String {
 }
 
 /// A consumer that just grabs stokes off the channel and drops them
-pub fn dummy_consumer(stokes_rcv: Receiver<Stokes>) -> anyhow::Result<()> {
+pub fn dummy_consumer(stokes_rcv: Receiver<Stokes>) -> eyre::Result<()> {
     info!("Starting dummy consumer");
     while stokes_rcv.recv_ref().is_some() {}
     Ok(())
@@ -33,7 +33,7 @@ pub fn dada_consumer(
     payload_start: Epoch,
     downsample_factor: usize,
     window_size: usize,
-) -> anyhow::Result<()> {
+) -> eyre::Result<()> {
     // DADA window
     let mut stokes_cnt = 0usize;
     // We will capture the timestamp on the first packet
@@ -64,7 +64,7 @@ pub fn dada_consumer(
             // Grab the next stokes parameters (already downsampled)
             let mut stokes = stokes_rcv
                 .recv_ref()
-                .ok_or_else(|| anyhow!("Channel closed"))?;
+                .ok_or_else(|| eyre!("Channel closed"))?;
             debug_assert_eq!(stokes.len(), CHANNELS);
             // Timestamp first one
             if first_payload {
@@ -105,7 +105,7 @@ pub fn filterbank_consumer(
     stokes_rcv: Receiver<Stokes>,
     payload_start: Epoch,
     downsample_factor: usize,
-) -> anyhow::Result<()> {
+) -> eyre::Result<()> {
     // Filename with ISO 8610 standard format
     let fmt = Format::from_str("%Y%m%dT%H%M%S").unwrap();
     let filename = format!("grex-{}.fil", Formatter::new(Epoch::now()?, fmt));
@@ -123,7 +123,7 @@ pub fn filterbank_consumer(
         // Grab next stokes
         let stokes = stokes_rcv
             .recv_ref()
-            .ok_or_else(|| anyhow!("Channel closed"))?;
+            .ok_or_else(|| eyre!("Channel closed"))?;
         // Timestamp first one
         if first_payload {
             first_payload = false;

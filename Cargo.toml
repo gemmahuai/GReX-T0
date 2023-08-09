@@ -4,7 +4,6 @@ version = "0.5.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1"
 casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", branch = "main" }
 casperfpga_derive = "0.1"
 clap = { version = "4", features = ["derive"] }
@@ -33,6 +32,8 @@ hifitime = "3"
 memmap2 = "0.5"
 rand_distr = "0.4"
 rand = "0.8"
+eyre = "0.6"
+color-eyre = "0.5"
 
 [lib]
 name = "grex_t0"

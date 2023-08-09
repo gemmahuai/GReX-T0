@@ -47,7 +47,7 @@ pub struct Capture {
 }
 
 impl Capture {
-    pub fn new(port: u16) -> anyhow::Result<Self> {
+    pub fn new(port: u16) -> eyre::Result<Self> {
         // Create UDP socket
         let socket = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
         // Bind our listening address
@@ -79,7 +79,7 @@ impl Capture {
         })
     }
 
-    pub fn capture(&mut self, buf: &mut [u8]) -> anyhow::Result<()> {
+    pub fn capture(&mut self, buf: &mut [u8]) -> eyre::Result<()> {
         let n = self.sock.recv(buf)?;
         if n != buf.len() {
             Err(Error::SizeMismatch(n).into())
@@ -93,7 +93,7 @@ impl Capture {
         payload_sender: StaticSender<Payload>,
         stats_send: Sender<Stats>,
         stats_polling_time: Duration,
-    ) -> anyhow::Result<()> {
+    ) -> eyre::Result<()> {
         let mut last_stats = Instant::now();
         let mut capture_buf = [0u8; PAYLOAD_SIZE];
         loop {
@@ -162,7 +162,7 @@ pub fn cap_task(
     port: u16,
     cap_send: StaticSender<Payload>,
     stats_send: Sender<Stats>,
-) -> anyhow::Result<()> {
+) -> eyre::Result<()> {
     info!("Starting capture task!");
     let mut cap = Capture::new(port).unwrap();
     cap.start(cap_send, stats_send, STATS_POLL_DURATION)

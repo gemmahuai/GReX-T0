@@ -5,29 +5,38 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Remote attach",
             "type": "lldb",
-            "request": "custom",
-            "sourceLanguages": [
-                "rust"
-            ],
-            "processCreateCommands": [
-                "gdb-remote 999",
-                "attach 1196"
-            ],
+            "request": "launch",
+            "name": "Debug unit tests in library 'grex_t0'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=grex_t0",
+                    "--",
+                    "--fpga-addr 192.168.0.3:69",
+                ],
+                "filter": {
+                    "name": "grex_t0",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'grex-t0'",
+            "name": "Debug executable 'grex_t0'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=grex-t0",
-                    "--package=grex-t0"
+                    "--bin=grex_t0",
+                    "--package=grex_t0"
                 ],
                 "filter": {
-                    "name": "grex-t0",
+                    "name": "grex_t0",
                     "kind": "bin"
                 }
             },
@@ -37,17 +46,36 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'grex-t0'",
+            "name": "Debug unit tests in executable 'grex_t0'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=grex-t0",
-                    "--package=grex-t0"
+                    "--bin=grex_t0",
+                    "--package=grex_t0"
                 ],
                 "filter": {
-                    "name": "grex-t0",
+                    "name": "grex_t0",
                     "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug benchmark 'benchmarks'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bench=benchmarks",
+                    "--package=grex_t0"
+                ],
+                "filter": {
+                    "name": "benchmarks",
+                    "kind": "bench"
                 }
             },
             "args": [],

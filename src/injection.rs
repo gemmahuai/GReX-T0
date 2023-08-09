@@ -1,8 +1,7 @@
 //! Task for injecting a fake pulse into the timestream to test/validate downstream components
-
 use crate::common::{Stokes, CHANNELS};
-use anyhow::anyhow;
 use byte_slice_cast::AsSliceOf;
+use eyre::eyre;
 use log::{info, warn};
 use memmap2::Mmap;
 use ndarray::{s, ArrayView, ArrayView2};
@@ -12,7 +11,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use thingbuf::mpsc::blocking::{Receiver, Sender};
 
-fn read_pulse(pulse_mmap: &Mmap) -> anyhow::Result<ArrayView2<f64>> {
+fn read_pulse(pulse_mmap: &Mmap) -> eyre::Result<ArrayView2<f64>> {
     let floats = pulse_mmap[..].as_slice_of::<f64>()?;
     let time_samples = floats.len() / CHANNELS;
     let block = ArrayView::from_shape((CHANNELS, time_samples), floats)?;
@@ -24,7 +23,7 @@ pub fn pulse_injection_task(
     output: Sender<Stokes>,
     cadence: Duration,
     pulse_path: PathBuf,
-) -> anyhow::Result<()> {
+) -> eyre::Result<()> {
     // Grab all the .dat files in the given directory
     let pulse_path = std::fs::read_dir(pulse_path);
 
@@ -61,7 +60,7 @@ pub fn pulse_injection_task(
 
         loop {
             // Grab stokes from downsample
-            let mut s = input.recv_ref().ok_or_else(|| anyhow!("Channel closed"))?;
+            let mut s = input.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
             if last_injection.elapsed() >= cadence {
                 last_injection = Instant::now();
                 currently_injecting = true;
@@ -88,7 +87,7 @@ pub fn pulse_injection_task(
         // Missing the path, throw a warning and just connect the channels
         warn!("Pulse injection source folder missing, skipping pulse injection");
         loop {
-            let s = input.recv().ok_or_else(|| anyhow!("Channel closed"))?;
+            let s = input.recv().ok_or_else(|| eyre!("Channel closed"))?;
             output.send(s)?;
         }
     }

@@ -1,7 +1,5 @@
 //! Control of the SNAP board running the gateware
-
 use crate::common::CHANNELS;
-use anyhow::bail;
 use casperfpga::transport::{
     tapcp::{Platform, Tapcp},
     Transport,
@@ -35,14 +33,14 @@ impl Device {
     }
 
     /// Resets the state of the SNAP
-    pub fn reset(&mut self) -> anyhow::Result<()> {
+    pub fn reset(&mut self) -> eyre::Result<()> {
         self.fpga.master_rst.write(true)?;
         self.fpga.master_rst.write(false)?;
         Ok(())
     }
 
     /// Gets the 10 GbE data connection in working order
-    pub fn start_networking(&mut self) -> anyhow::Result<()> {
+    pub fn start_networking(&mut self) -> eyre::Result<()> {
         let dest_ip: Ipv4Addr = "192.168.0.1".parse()?;
         let dest_port = 60000u16;
         // Disable
@@ -74,7 +72,7 @@ impl Device {
 
     /// Send a trigger pulse to start the flow of bytes, returning the true time of the start of packets
     #[allow(clippy::missing_panics_doc)]
-    pub fn trigger(&mut self, time_sync: &SynchronizationResult) -> anyhow::Result<Epoch> {
+    pub fn trigger(&mut self, time_sync: &SynchronizationResult) -> eyre::Result<Epoch> {
         // Get the current time, and wait to send the triggers to align the time with a rising PPS edge
         let now = UNIX_REF_EPOCH + hifitime::Duration::from(time_sync.datetime().unix_timestamp()?);
         let next_sec = now.ceil(1.seconds());
@@ -91,7 +89,7 @@ impl Device {
     }
 
     /// Send a trigger pulse to start the flow of bytes, without synchronizing against NTP
-    pub fn blind_trigger(&mut self) -> anyhow::Result<Epoch> {
+    pub fn blind_trigger(&mut self) -> eyre::Result<Epoch> {
         // Get the current time, and wait to send the triggers to align the time with a rising PPS edge
         let now = hifitime::Epoch::now()?;
         let next_sec = now.ceil(1.seconds());

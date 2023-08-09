@@ -2,7 +2,7 @@ use crate::capture::Stats;
 use crate::common::Stokes;
 use crate::fpga::Device;
 use actix_web::{dev::Server, get, App, HttpResponse, HttpServer, Responder};
-use anyhow::anyhow;
+use eyre::eyre;
 use lazy_static::lazy_static;
 use log::{info, warn};
 use prometheus::{
@@ -55,17 +55,17 @@ pub fn monitor_task(
     device: Device,
     stats: Receiver<Stats>,
     avg: Receiver<Stokes>,
-) -> anyhow::Result<()> {
+) -> eyre::Result<()> {
     info!("Starting monitoring task!");
     loop {
         // Blocking here is ok, these are infrequent events
-        let stat = stats.recv_ref().ok_or_else(|| anyhow!("Channel closed"))?;
+        let stat = stats.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
         PACKET_GAUGE.set(stat.processed.try_into().unwrap());
         DROP_GAUGE.set(stat.drops.try_into().unwrap());
         SHUFFLED_GAUGE.set(stat.shuffled.try_into().unwrap());
 
         // Update channel data
-        let avg_spec = avg.recv_ref().ok_or_else(|| anyhow!("Channel closed"))?;
+        let avg_spec = avg.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
         for (i, v) in avg_spec.iter().enumerate() {
             SPECTRUM_GAUGE
                 .with_label_values(&[&i.to_string()])
@@ -122,7 +122,7 @@ pub fn monitor_task(
     }
 }
 
-pub fn start_web_server(metrics_port: u16) -> anyhow::Result<Server> {
+pub fn start_web_server(metrics_port: u16) -> eyre::Result<Server> {
     info!("Starting metrics webserver");
     Ok(HttpServer::new(|| App::new().service(metrics))
         .bind(("0.0.0.0", metrics_port))?

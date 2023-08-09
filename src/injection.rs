@@ -2,7 +2,6 @@
 use crate::common::{Stokes, CHANNELS};
 use byte_slice_cast::AsSliceOf;
 use eyre::eyre;
-use log::{info, warn};
 use memmap2::Mmap;
 use ndarray::{s, ArrayView, ArrayView2};
 use rand_distr::{Distribution, Normal};
@@ -10,6 +9,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use thingbuf::mpsc::blocking::{Receiver, Sender};
+use tracing::{info, warn};
 
 fn read_pulse(pulse_mmap: &Mmap) -> eyre::Result<ArrayView2<f64>> {
     let floats = pulse_mmap[..].as_slice_of::<f64>()?;

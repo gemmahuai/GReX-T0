@@ -1,9 +1,9 @@
 //! Inter-thread processing (downsampling, etc)
 use crate::common::{Payload, Stokes, CHANNELS};
 use eyre::{bail, eyre};
-use log::info;
 use std::time::{Duration, Instant};
 use thingbuf::mpsc::blocking::{Sender, StaticReceiver, StaticSender};
+use tracing::info;
 
 /// How long before we send one off to monitor
 const MONITOR_CADENCE: Duration = Duration::from_secs(10);

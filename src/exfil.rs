@@ -4,11 +4,11 @@ use byte_slice_cast::AsByteSlice;
 use eyre::eyre;
 use hifitime::prelude::*;
 use lending_iterator::prelude::*;
-use log::{debug, info};
 use psrdada::client::DadaClient;
 use sigproc_filterbank::write::WriteFilterbank;
 use std::{collections::HashMap, io::Write, str::FromStr, sync::atomic::Ordering};
 use thingbuf::mpsc::blocking::Receiver;
+use tracing::{debug, info};
 
 // Set by hardware (in MHz)
 const LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;

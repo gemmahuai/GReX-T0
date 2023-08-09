@@ -5,17 +5,15 @@ edition = "2021"
 
 [dependencies]
 casperfpga = { git = "https://github.com/kiranshila/casperfpga_rs", branch = "main" }
-casperfpga_derive = "0.1"
+casperfpga_derive = { git = "https://github.com/kiranshila/casperfpga_rs", branch = "main" }
 clap = { version = "4", features = ["derive"] }
 fixed = "1"
 hdf5 = { git = "https://github.com/aldanor/hdf5-rust", branch = "master" }
 actix-web = "4"
 lazy_static = "1.4"
-log = "0.4"
 prometheus = "0.13"
 ndarray = "0.15"
 num-complex = "0.4"
-pretty_env_logger = "0.4"
 regex = "1"
 rsntp = "3"
 socket2 = "0.4"
@@ -34,6 +32,8 @@ rand_distr = "0.4"
 rand = "0.8"
 eyre = "0.6"
 color-eyre = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lib]
 name = "grex_t0"

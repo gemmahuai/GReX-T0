@@ -1,5 +1,6 @@
 pub use clap::Parser;
 use core_affinity::CoreId;
+use eyre::bail;
 use grex_t0::{
     args,
     //calibrate::calibrate,
@@ -12,11 +13,12 @@ use grex_t0::{
     monitoring,
     processing,
 };
-use log::{info, LevelFilter};
 use rsntp::SntpClient;
 use std::time::Duration;
 use thingbuf::mpsc::blocking::{channel, StaticChannel};
 use tokio::try_join;
+use tracing::info;
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 // Setup the static channels
 const FAST_PATH_CHANNEL_SIZE: usize = 1024;
@@ -31,8 +33,9 @@ async fn main() -> eyre::Result<()> {
     // Get the CPU core range
     let mut cpus = cli.core_range;
     // Logger init
-    pretty_env_logger::formatted_builder()
-        .filter_level(LevelFilter::Info)
+    tracing_subscriber::registry()
+        .with(fmt::layer())
+        .with(EnvFilter::from_default_env())
         .init();
     // Setup NTP
     let time_sync = if !cli.skip_ntp {

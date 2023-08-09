@@ -4,12 +4,12 @@ use crate::fpga::Device;
 use actix_web::{dev::Server, get, App, HttpResponse, HttpServer, Responder};
 use eyre::eyre;
 use lazy_static::lazy_static;
-use log::{info, warn};
 use prometheus::{
     register_gauge, register_gauge_vec, register_int_gauge, register_int_gauge_vec, Gauge,
     GaugeVec, IntGauge, IntGaugeVec, TextEncoder,
 };
 use thingbuf::mpsc::blocking::Receiver;
+use tracing::{info, warn};
 
 lazy_static! {
     static ref CHANNEL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
@@ -73,50 +73,50 @@ pub fn monitor_task(
         }
 
         // Metrics from the FPGA
-        if let Ok(v) = device.fpga.fft_overflow_cnt.read() {
-            FFT_OVFL_GAUGE.set(u32::from(v).try_into().unwrap());
-        } else {
-            warn!("Error reading from FPGA");
+        match device.fpga.fft_overflow_cnt.read() {
+            Ok(v) => FFT_OVFL_GAUGE.set(u32::from(v).try_into().unwrap()),
+            Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
-        if let Ok(v) = device.fpga.requant_a_overflow.read() {
-            REQUANT_OVFL_GAUGE
+        
+        match device.fpga.requant_a_overflow.read() {
+            Ok(v) => REQUANT_OVFL_GAUGE
                 .with_label_values(&["a"])
-                .set(u32::from(v).try_into().unwrap());
-        } else {
-            warn!("Error reading from FPGA");
+                .set(u32::from(v).try_into().unwrap()),
+            Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
-        if let Ok(v) = device.fpga.requant_b_overflow.read() {
-            REQUANT_OVFL_GAUGE
+
+        match device.fpga.requant_b_overflow.read() {
+            Ok(v) => REQUANT_OVFL_GAUGE
                 .with_label_values(&["b"])
-                .set(u32::from(v).try_into().unwrap());
-        } else {
-            warn!("Error reading from FPGA");
+                .set(u32::from(v).try_into().unwrap()),
+            Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
-        if let Ok(v) = device.fpga.transport.lock().unwrap().temperature() {
-            FPGA_TEMP.set(v.try_into().unwrap());
-        } else {
-            warn!("Error reading from FPGA");
+
+        match device.fpga.transport.lock().unwrap().temperature() {
+            Ok(v) => FPGA_TEMP.set(v.try_into().unwrap()),
+            Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
 
         // Take a snapshot of ADC values and compute RMS value
         if device.fpga.adc_snap.arm().is_ok() && device.fpga.adc_snap.trigger().is_ok() {
-            if let Ok(v) = device.fpga.adc_snap.read() {
-                let mut rms_a = 0.0;
-                let mut rms_b = 0.0;
-                let mut n = 0;
-                for chunk in v.chunks(4) {
-                    rms_a += f64::powi(f64::from(chunk[0] as i8), 2);
-                    rms_a += f64::powi(f64::from(chunk[1] as i8), 2);
-                    rms_b += f64::powi(f64::from(chunk[2] as i8), 2);
-                    rms_b += f64::powi(f64::from(chunk[3] as i8), 2);
-                    n += 2;
+            match device.fpga.adc_snap.read() {
+                Ok(v) => {
+                    let mut rms_a = 0.0;
+                    let mut rms_b = 0.0;
+                    let mut n = 0;
+                    for chunk in v.chunks(4) {
+                        rms_a += f64::powi(f64::from(chunk[0] as i8), 2);
+                        rms_a += f64::powi(f64::from(chunk[1] as i8), 2);
+                        rms_b += f64::powi(f64::from(chunk[2] as i8), 2);
+                        rms_b += f64::powi(f64::from(chunk[3] as i8), 2);
+                        n += 2;
+                    }
+                    rms_a = ((1.0 / (n as f64)) * rms_a).sqrt();
+                    rms_b = ((1.0 / (n as f64)) * rms_b).sqrt();
+                    ADC_RMS_GAUGE.with_label_values(&["a"]).set(rms_a);
+                    ADC_RMS_GAUGE.with_label_values(&["b"]).set(rms_b);
                 }
-                rms_a = ((1.0 / (n as f64)) * rms_a).sqrt();
-                rms_b = ((1.0 / (n as f64)) * rms_b).sqrt();
-                ADC_RMS_GAUGE.with_label_values(&["a"]).set(rms_a);
-                ADC_RMS_GAUGE.with_label_values(&["b"]).set(rms_b);
-            } else {
-                warn!("Error reading ADC snapshot");
+                Err(e) => warn!("SNAP Error - {e}, {:?}", e),
             }
         }
     }

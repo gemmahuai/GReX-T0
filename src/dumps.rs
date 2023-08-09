@@ -4,7 +4,6 @@ use crate::common::{Payload, CHANNELS};
 use eyre::eyre;
 use hdf5::File;
 use hifitime::prelude::*;
-use log::{info, warn};
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
@@ -12,6 +11,7 @@ use std::{
 };
 use thingbuf::mpsc::blocking::{Receiver, Sender, StaticReceiver};
 use tokio::net::UdpSocket;
+use tracing::{info, warn};
 
 pub struct DumpRing {
     capacity: usize,

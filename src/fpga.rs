@@ -5,9 +5,11 @@ use casperfpga::transport::{
     Transport,
 };
 use casperfpga_derive::fpga_from_fpg;
+use eyre::bail;
 use hifitime::{prelude::*, UNIX_REF_EPOCH};
 use rsntp::SynchronizationResult;
 use std::net::{Ipv4Addr, SocketAddr};
+use tracing::debug;
 
 fpga_from_fpg!(GrexFpga, "gateware/grex_gateware.fpg");
 
@@ -129,5 +131,12 @@ impl Device {
         let a_cast = a.iter().map(|v| u64::from(*v)).collect();
         let b_cast = b.iter().map(|v| u64::from(*v)).collect();
         (a_cast, b_cast)
+    }
+}
+
+impl Drop for Device {
+    fn drop(&mut self) {
+        debug!("Cleaning up SNAP");
+        let _ = self.reset();
     }
 }

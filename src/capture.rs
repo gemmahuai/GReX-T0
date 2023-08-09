@@ -1,7 +1,6 @@
 //! Logic for capturing raw packets from the NIC, parsing them into payloads, and sending them to other processing threads
 
 use crate::common::Payload;
-use log::{error, info, warn};
 use socket2::{Domain, Socket, Type};
 use std::net::UdpSocket;
 use std::{
@@ -10,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 use thingbuf::mpsc::blocking::{Sender, StaticSender};
+use tracing::{error, info, warn};
 
 /// Size of the packet count header
 const TIMESTAMP_SIZE: usize = 8;

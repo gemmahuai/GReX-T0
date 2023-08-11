@@ -6,6 +6,8 @@ use hifitime::prelude::*;
 use lending_iterator::prelude::*;
 use psrdada::client::DadaClient;
 use sigproc_filterbank::write::WriteFilterbank;
+use std::fs::File;
+use std::path::Path;
 use std::{collections::HashMap, io::Write, str::FromStr, sync::atomic::Ordering};
 use thingbuf::mpsc::blocking::Receiver;
 use tracing::{debug, info};
@@ -105,12 +107,14 @@ pub fn filterbank_consumer(
     stokes_rcv: Receiver<Stokes>,
     payload_start: Epoch,
     downsample_factor: usize,
+    path: &Path,
 ) -> eyre::Result<()> {
     // Filename with ISO 8610 standard format
     let fmt = Format::from_str("%Y%m%dT%H%M%S").unwrap();
     let filename = format!("grex-{}.fil", Formatter::new(Epoch::now()?, fmt));
+    let file_path = path.join(filename);
     // Create the file
-    let mut file = std::fs::File::create(filename)?;
+    let mut file = File::create(file_path)?;
     // Create the filterbank context
     let mut fb = WriteFilterbank::new(CHANNELS, 1);
     // Setup the header stuff

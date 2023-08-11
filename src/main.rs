@@ -125,8 +125,12 @@ async fn main() -> eyre::Result<()> {
                         2usize.pow(cli.downsample_power),
                         samples
                     ),
-                    args::Exfil::Filterbank =>
-                        exfil::filterbank_consumer(ex_r, psc, 2usize.pow(cli.downsample_power)),
+                    args::Exfil::Filterbank => exfil::filterbank_consumer(
+                        ex_r,
+                        psc,
+                        2usize.pow(cli.downsample_power),
+                        &cli.filterbank_path
+                    ),
                 },
                 None => exfil::dummy_consumer(ex_r),
             }

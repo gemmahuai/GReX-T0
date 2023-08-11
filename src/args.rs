@@ -8,6 +8,9 @@ pub struct Cli {
     /// Path to save voltage dumps
     #[arg(long, default_value = ".")]
     pub dump_path: PathBuf,
+    /// Path to save filterbanks
+    #[arg(long, default_value = ".")]
+    pub filterbank_path: PathBuf,
     /// CPU cores to which we'll build tasks. They should share a NUMA node.
     #[arg(long, default_value = "0:7", value_parser = parse_core_range)]
     pub core_range: RangeInclusive<usize>,

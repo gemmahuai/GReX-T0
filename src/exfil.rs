@@ -11,7 +11,7 @@ use thingbuf::mpsc::blocking::Receiver;
 use tracing::{debug, info};
 
 // Set by hardware (in MHz)
-const LOWBAND_MID_FREQ: f64 = 1_280.061_035_16;
+const HIGHBAND_MID_FREQ: f64 = 1529.93896484375; // Highend of band - half the channel spacing
 const BANDWIDTH: f64 = 250.0;
 
 /// Convert a chronno `DateTime` into a heimdall-compatible timestamp string
@@ -114,8 +114,8 @@ pub fn filterbank_consumer(
     // Create the filterbank context
     let mut fb = WriteFilterbank::new(CHANNELS, 1);
     // Setup the header stuff
-    fb.fch1 = Some(LOWBAND_MID_FREQ); // Start of band + half the step size
-    fb.foff = Some(BANDWIDTH / CHANNELS as f64);
+    fb.fch1 = Some(HIGHBAND_MID_FREQ); // End of band + half the step size
+    fb.foff = Some(-(BANDWIDTH / CHANNELS as f64));
     fb.tsamp = Some(PACKET_CADENCE * downsample_factor as f64);
     // We will capture the timestamp on the first packet
     let mut first_payload = true;

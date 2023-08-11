@@ -12,7 +12,7 @@ pub const PACKET_CADENCE: f64 = 8.192e-6;
 
 pub type Stokes = ArrayVec<f32, CHANNELS>;
 
-/// The complex number representing the value of a channel
+/// The complex number representing the voltage of a single channel
 #[derive(Debug, Clone, Copy)]
 pub struct Channel(Complex<i8>);
 

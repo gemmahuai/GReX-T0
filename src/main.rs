@@ -44,6 +44,18 @@ async fn main() -> eyre::Result<()> {
     let sd_downsamp_r = sd_s.subscribe();
     let sd_dump_r = sd_s.subscribe();
     let sd_exfil_r = sd_s.subscribe();
+    tokio::spawn(async move {
+        // Wait for ctrlc
+        match signal::ctrl_c().await {
+            Ok(()) => {
+                sd_s.send(()).unwrap();
+            }
+            Err(err) => {
+                eprintln!("Unable to listen for shutdown signal: {}", err);
+                // we also shut down in case of error
+            }
+        }
+    });
     // Setup NTP
     let time_sync = if !cli.skip_ntp {
         // Setup NTP
@@ -167,17 +179,6 @@ async fn main() -> eyre::Result<()> {
         // Start the trigger watch
         tokio::spawn(dumps::trigger_task(trig_s, cli.trig_port))
     )?;
-
-    // Wait for ctrlc
-    match signal::ctrl_c().await {
-        Ok(()) => {
-            sd_s.send(()).unwrap();
-        }
-        Err(err) => {
-            eprintln!("Unable to listen for shutdown signal: {}", err);
-            // we also shut down in case of error
-        }
-    }
 
     // Join them all when we kill the task
     for handle in handles {

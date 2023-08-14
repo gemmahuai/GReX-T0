@@ -24,9 +24,17 @@ fn heimdall_timestamp(time: &Epoch) -> String {
 }
 
 /// A consumer that just grabs stokes off the channel and drops them
-pub fn dummy_consumer(stokes_rcv: Receiver<Stokes>) -> eyre::Result<()> {
+pub fn dummy_consumer(
+    stokes_rcv: Receiver<Stokes>,
+    mut shutdown: broadcast::Receiver<()>,
+) -> eyre::Result<()> {
     info!("Starting dummy consumer");
-    while stokes_rcv.recv_ref().is_some() {}
+    while stokes_rcv.recv_ref().is_some() {
+        if shutdown.try_recv().is_ok() {
+            info!("Exfil task stopping");
+            break;
+        }
+    }
     Ok(())
 }
 

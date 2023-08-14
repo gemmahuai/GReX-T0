@@ -164,7 +164,7 @@ async fn main() -> eyre::Result<()> {
                         sd_exfil_r
                     ),
                 },
-                None => exfil::dummy_consumer(ex_r),
+                None => exfil::dummy_consumer(ex_r, sd_exfil_r),
             }
         ),
         (

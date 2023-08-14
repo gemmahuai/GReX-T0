@@ -70,7 +70,11 @@ impl DumpRing {
     }
 }
 
-pub async fn trigger_task(sender: Sender<()>, port: u16) -> eyre::Result<()> {
+pub async fn trigger_task(
+    sender: Sender<()>,
+    port: u16,
+    mut shutdown: broadcast::Receiver<()>,
+) -> eyre::Result<()> {
     info!("Starting voltage ringbuffer trigger task!");
     // Create the socket
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -78,9 +82,14 @@ pub async fn trigger_task(sender: Sender<()>, port: u16) -> eyre::Result<()> {
     // Maybe even 0 would work, we don't expect data
     let mut buf = [0; 10];
     loop {
+        if shutdown.try_recv().is_ok() {
+            info!("Voltage ringbuffer trigger task stopping");
+            break;
+        }
         sock.recv_from(&mut buf).await?;
         sender.send(())?;
     }
+    Ok(())
 }
 
 pub fn dump_task(

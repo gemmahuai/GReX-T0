@@ -44,6 +44,7 @@ async fn main() -> eyre::Result<()> {
     let sd_downsamp_r = sd_s.subscribe();
     let sd_dump_r = sd_s.subscribe();
     let sd_exfil_r = sd_s.subscribe();
+    let sd_trig_r = sd_s.subscribe();
     tokio::spawn(async move {
         // Wait for ctrlc
         match signal::ctrl_c().await {
@@ -177,7 +178,7 @@ async fn main() -> eyre::Result<()> {
         // Start the webserver
         tokio::spawn(monitoring::start_web_server(cli.metrics_port)?),
         // Start the trigger watch
-        tokio::spawn(dumps::trigger_task(trig_s, cli.trig_port))
+        tokio::spawn(dumps::trigger_task(trig_s, cli.trig_port, sd_trig_r))
     )?;
 
     // Join them all when we kill the task

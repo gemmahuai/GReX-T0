@@ -134,7 +134,7 @@ pub fn start_web_server(metrics_port: u16) -> eyre::Result<Server> {
     info!("Starting metrics webserver");
     let server = HttpServer::new(|| App::new().service(metrics))
         .bind(("0.0.0.0", metrics_port))?
-        .disable_signals()
+        //.disable_signals()
         .run();
     Ok(server)
 }

@@ -10,7 +10,7 @@ use std::{
     str::FromStr,
 };
 use thingbuf::mpsc::blocking::{Receiver, Sender, StaticReceiver};
-use tokio::net::UdpSocket;
+use tokio::{net::UdpSocket, sync::broadcast};
 use tracing::{info, warn};
 
 pub struct DumpRing {
@@ -89,9 +89,14 @@ pub fn dump_task(
     signal_reciever: Receiver<()>,
     start_time: Epoch,
     path: PathBuf,
+    mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
     info!("Starting voltage ringbuffer fill task!");
     loop {
+        if shutdown.try_recv().is_ok() {
+            info!("Dump task stopping");
+            break;
+        }
         // First check if we need to dump, as that takes priority
         if signal_reciever.try_recv().is_ok() {
             info!("Dumping ringbuffer");
@@ -108,4 +113,5 @@ pub fn dump_task(
             ring_ref.clone_from(&pl);
         }
     }
+    Ok(())
 }

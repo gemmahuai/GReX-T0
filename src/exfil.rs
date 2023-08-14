@@ -10,6 +10,7 @@ use std::fs::File;
 use std::path::Path;
 use std::{collections::HashMap, io::Write, str::FromStr, sync::atomic::Ordering};
 use thingbuf::mpsc::blocking::Receiver;
+use tokio::sync::broadcast;
 use tracing::{debug, info};
 
 // Set by hardware (in MHz)
@@ -35,6 +36,7 @@ pub fn dada_consumer(
     payload_start: Epoch,
     downsample_factor: usize,
     window_size: usize,
+    mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
     // DADA window
     let mut stokes_cnt = 0usize;
@@ -63,6 +65,10 @@ pub fn dada_consumer(
         // Grab the next psrdada block we can write to (BLOCKING)
         let mut block = data_writer.next().unwrap();
         loop {
+            if shutdown.try_recv().is_ok() {
+                info!("Exfil task stopping");
+                return Ok(());
+            }
             // Grab the next stokes parameters (already downsampled)
             let mut stokes = stokes_rcv
                 .recv_ref()
@@ -108,6 +114,7 @@ pub fn filterbank_consumer(
     payload_start: Epoch,
     downsample_factor: usize,
     path: &Path,
+    mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
     // Filename with ISO 8610 standard format
     let fmt = Format::from_str("%Y%m%dT%H%M%S").unwrap();
@@ -124,6 +131,10 @@ pub fn filterbank_consumer(
     // We will capture the timestamp on the first packet
     let mut first_payload = true;
     loop {
+        if shutdown.try_recv().is_ok() {
+            info!("Exfil task stopping");
+            break;
+        }
         // Grab next stokes
         let stokes = stokes_rcv
             .recv_ref()
@@ -140,4 +151,5 @@ pub fn filterbank_consumer(
         // Stream to FB
         file.write_all(&fb.pack(&stokes))?;
     }
+    Ok(())
 }

@@ -9,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 use thingbuf::mpsc::blocking::{Sender, StaticSender};
+use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
 /// Size of the packet count header
@@ -93,10 +94,16 @@ impl Capture {
         payload_sender: StaticSender<Payload>,
         stats_send: Sender<Stats>,
         stats_polling_time: Duration,
+        mut shutdown: broadcast::Receiver<()>,
     ) -> eyre::Result<()> {
         let mut last_stats = Instant::now();
         let mut capture_buf = [0u8; PAYLOAD_SIZE];
         loop {
+            // Look for shutdown signal
+            if shutdown.try_recv().is_ok() {
+                info!("Capture task stopping");
+                break;
+            }
             // Capture into buf
             self.capture(&mut capture_buf[..])?;
             // Transmute into a payload
@@ -147,6 +154,7 @@ impl Capture {
                 self.next_expected_count = payload.count + 1;
             }
         }
+        Ok(())
     }
 }
 
@@ -162,8 +170,9 @@ pub fn cap_task(
     port: u16,
     cap_send: StaticSender<Payload>,
     stats_send: Sender<Stats>,
+    shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
     info!("Starting capture task!");
     let mut cap = Capture::new(port).unwrap();
-    cap.start(cap_send, stats_send, STATS_POLL_DURATION)
+    cap.start(cap_send, stats_send, STATS_POLL_DURATION, shutdown)
 }

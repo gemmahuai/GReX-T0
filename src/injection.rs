@@ -9,6 +9,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use thingbuf::mpsc::blocking::{Receiver, Sender};
+use tokio::sync::broadcast;
 use tracing::{info, warn};
 
 fn read_pulse(pulse_mmap: &Mmap) -> eyre::Result<ArrayView2<f64>> {
@@ -23,6 +24,7 @@ pub fn pulse_injection_task(
     output: Sender<Stokes>,
     cadence: Duration,
     pulse_path: PathBuf,
+    mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
     // Grab all the .dat files in the given directory
     let pulse_path = std::fs::read_dir(pulse_path);
@@ -59,6 +61,10 @@ pub fn pulse_injection_task(
         let normal = Normal::new(0.4, 0.05).unwrap();
 
         loop {
+            if shutdown.try_recv().is_ok() {
+                info!("Injection task stopping");
+                break;
+            }
             // Grab stokes from downsample
             let mut s = input.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
             if last_injection.elapsed() >= cadence {
@@ -87,8 +93,13 @@ pub fn pulse_injection_task(
         // Missing the path, throw a warning and just connect the channels
         warn!("Pulse injection source folder missing, skipping pulse injection");
         loop {
+            if shutdown.try_recv().is_ok() {
+                info!("Injection task stopping");
+                break;
+            }
             let s = input.recv().ok_or_else(|| eyre!("Channel closed"))?;
             output.send(s)?;
         }
     }
+    Ok(())
 }

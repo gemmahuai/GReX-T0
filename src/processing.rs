@@ -3,6 +3,7 @@ use crate::common::{Payload, Stokes, CHANNELS};
 use eyre::{bail, eyre};
 use std::time::{Duration, Instant};
 use thingbuf::mpsc::blocking::{Sender, StaticReceiver, StaticSender};
+use tokio::sync::broadcast;
 use tracing::info;
 
 /// How long before we send one off to monitor
@@ -15,8 +16,9 @@ pub fn downsample_task(
     to_dumps: StaticSender<Payload>,
     monitor: Sender<Stokes>,
     downsample_power: u32,
+    mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
-    info!("Starting downsample");
+    info!("Starting downsample task");
 
     // We have two averaging states, one for the normal downsample process and one for monitoring
     // They differ in that the standard "thru" connection is averaging by counts and the monitoing one is averaging by time
@@ -30,6 +32,10 @@ pub fn downsample_task(
     let mut local_monitor_iters = 0;
 
     loop {
+        if shutdown.try_recv().is_ok() {
+            info!("Downsample task stopping");
+            break;
+        }
         let payload = receiver.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
         // Compute Stokes I
         let stokes = payload.stokes_i();
@@ -81,4 +87,5 @@ pub fn downsample_task(
             }
         }
     }
+    Ok(())
 }

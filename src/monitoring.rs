@@ -9,6 +9,7 @@ use prometheus::{
     GaugeVec, IntGauge, IntGaugeVec, TextEncoder,
 };
 use thingbuf::mpsc::blocking::Receiver;
+use tokio::sync::broadcast;
 use tracing::{info, warn};
 
 lazy_static! {
@@ -55,9 +56,15 @@ pub fn monitor_task(
     device: Device,
     stats: Receiver<Stats>,
     avg: Receiver<Stokes>,
+    mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
     info!("Starting monitoring task!");
     loop {
+        // Look for shutdown signal
+        if shutdown.try_recv().is_ok() {
+            info!("Monitoring task stopping");
+            break;
+        }
         // Blocking here is ok, these are infrequent events
         let stat = stats.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
         PACKET_GAUGE.set(stat.processed.try_into().unwrap());
@@ -77,7 +84,7 @@ pub fn monitor_task(
             Ok(v) => FFT_OVFL_GAUGE.set(u32::from(v).try_into().unwrap()),
             Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
-        
+
         match device.fpga.requant_a_overflow.read() {
             Ok(v) => REQUANT_OVFL_GAUGE
                 .with_label_values(&["a"])
@@ -120,6 +127,7 @@ pub fn monitor_task(
             }
         }
     }
+    Ok(())
 }
 
 pub fn start_web_server(metrics_port: u16) -> eyre::Result<Server> {

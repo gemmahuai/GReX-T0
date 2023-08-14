@@ -16,7 +16,7 @@ use grex_t0::{
 use rsntp::SntpClient;
 use std::time::Duration;
 use thingbuf::mpsc::blocking::{channel, StaticChannel};
-use tokio::try_join;
+use tokio::{signal, sync::broadcast, try_join};
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -37,6 +37,13 @@ async fn main() -> eyre::Result<()> {
         .with(fmt::layer())
         .with(EnvFilter::from_default_env())
         .init();
+    // Setup the exit handler
+    let (sd_s, sd_cap_r) = broadcast::channel(1);
+    let sd_mon_r = sd_s.subscribe();
+    let sd_inject_r = sd_s.subscribe();
+    let sd_downsamp_r = sd_s.subscribe();
+    let sd_dump_r = sd_s.subscribe();
+    let sd_exfil_r = sd_s.subscribe();
     // Setup NTP
     let time_sync = if !cli.skip_ntp {
         // Setup NTP
@@ -96,23 +103,34 @@ async fn main() -> eyre::Result<()> {
         }
     // Spawn all the threads
     let handles = thread_spawn!(
-        ("collect", monitoring::monitor_task(device, stat_r, avg_r)),
+        (
+            "collect",
+            monitoring::monitor_task(device, stat_r, avg_r, sd_mon_r)
+        ),
         (
             "injection",
             injection::pulse_injection_task(
                 inject_r,
                 ex_s,
                 Duration::from_secs(cli.injection_cadence),
-                cli.pulse_path
+                cli.pulse_path,
+                sd_inject_r
             )
         ),
         (
             "downsample",
-            processing::downsample_task(cap_r, inject_s, dump_s, avg_s, cli.downsample_power)
+            processing::downsample_task(
+                cap_r,
+                inject_s,
+                dump_s,
+                avg_s,
+                cli.downsample_power,
+                sd_downsamp_r
+            )
         ),
         (
             "dump",
-            dumps::dump_task(ring, dump_r, trig_r, packet_start, cli.dump_path)
+            dumps::dump_task(ring, dump_r, trig_r, packet_start, cli.dump_path, sd_dump_r)
         ),
         (
             "exfil",
@@ -123,19 +141,24 @@ async fn main() -> eyre::Result<()> {
                         ex_r,
                         psc,
                         2usize.pow(cli.downsample_power),
-                        samples
+                        samples,
+                        sd_exfil_r
                     ),
                     args::Exfil::Filterbank => exfil::filterbank_consumer(
                         ex_r,
                         psc,
                         2usize.pow(cli.downsample_power),
-                        &cli.filterbank_path
+                        &cli.filterbank_path,
+                        sd_exfil_r
                     ),
                 },
                 None => exfil::dummy_consumer(ex_r),
             }
         ),
-        ("capture", capture::cap_task(cli.cap_port, cap_s, stat_s))
+        (
+            "capture",
+            capture::cap_task(cli.cap_port, cap_s, stat_s, sd_cap_r)
+        )
     );
 
     let _ = try_join!(
@@ -144,6 +167,17 @@ async fn main() -> eyre::Result<()> {
         // Start the trigger watch
         tokio::spawn(dumps::trigger_task(trig_s, cli.trig_port))
     )?;
+
+    // Wait for ctrlc
+    match signal::ctrl_c().await {
+        Ok(()) => {
+            sd_s.send(()).unwrap();
+        }
+        Err(err) => {
+            eprintln!("Unable to listen for shutdown signal: {}", err);
+            // we also shut down in case of error
+        }
+    }
 
     // Join them all when we kill the task
     for handle in handles {

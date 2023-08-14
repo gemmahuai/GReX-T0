@@ -1,14 +1,14 @@
-use crate::capture::Stats;
 use crate::common::Stokes;
 use crate::fpga::Device;
+use crate::{capture::Stats, common::BLOCK_TIMEOUT};
 use actix_web::{dev::Server, get, App, HttpResponse, HttpServer, Responder};
-use eyre::eyre;
 use lazy_static::lazy_static;
 use prometheus::{
     register_gauge, register_gauge_vec, register_int_gauge, register_int_gauge_vec, Gauge,
     GaugeVec, IntGauge, IntGaugeVec, TextEncoder,
 };
 use thingbuf::mpsc::blocking::Receiver;
+use thingbuf::mpsc::errors::RecvTimeoutError;
 use tokio::sync::broadcast;
 use tracing::{info, warn};
 
@@ -66,17 +66,29 @@ pub fn monitor_task(
             break;
         }
         // Blocking here is ok, these are infrequent events
-        let stat = stats.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
-        PACKET_GAUGE.set(stat.processed.try_into().unwrap());
-        DROP_GAUGE.set(stat.drops.try_into().unwrap());
-        SHUFFLED_GAUGE.set(stat.shuffled.try_into().unwrap());
+        match stats.recv_ref_timeout(BLOCK_TIMEOUT) {
+            Ok(stat) => {
+                PACKET_GAUGE.set(stat.processed.try_into().unwrap());
+                DROP_GAUGE.set(stat.drops.try_into().unwrap());
+                SHUFFLED_GAUGE.set(stat.shuffled.try_into().unwrap());
+            }
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Closed) => break,
+            Err(_) => unreachable!(),
+        }
 
         // Update channel data
-        let avg_spec = avg.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
-        for (i, v) in avg_spec.iter().enumerate() {
-            SPECTRUM_GAUGE
-                .with_label_values(&[&i.to_string()])
-                .set(f64::from(*v));
+        match avg.recv_ref_timeout(BLOCK_TIMEOUT) {
+            Ok(avg_spec) => {
+                for (i, v) in avg_spec.iter().enumerate() {
+                    SPECTRUM_GAUGE
+                        .with_label_values(&[&i.to_string()])
+                        .set(f64::from(*v));
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Closed) => break,
+            Err(_) => unreachable!(),
         }
 
         // Metrics from the FPGA
@@ -134,7 +146,6 @@ pub fn start_web_server(metrics_port: u16) -> eyre::Result<Server> {
     info!("Starting metrics webserver");
     let server = HttpServer::new(|| App::new().service(metrics))
         .bind(("0.0.0.0", metrics_port))?
-        //.disable_signals()
         .run();
     Ok(server)
 }

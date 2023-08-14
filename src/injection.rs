@@ -1,14 +1,18 @@
 //! Task for injecting a fake pulse into the timestream to test/validate downstream components
-use crate::common::{Stokes, CHANNELS};
+use crate::common::{Stokes, BLOCK_TIMEOUT, CHANNELS};
 use byte_slice_cast::AsSliceOf;
-use eyre::eyre;
 use memmap2::Mmap;
 use ndarray::{s, ArrayView, ArrayView2};
 use rand_distr::{Distribution, Normal};
-use std::fs::File;
-use std::path::PathBuf;
-use std::time::{Duration, Instant};
-use thingbuf::mpsc::blocking::{Receiver, Sender};
+use std::{
+    fs::File,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
+use thingbuf::mpsc::{
+    blocking::{Receiver, Sender},
+    errors::RecvTimeoutError,
+};
 use tokio::sync::broadcast;
 use tracing::{info, warn};
 
@@ -66,28 +70,35 @@ pub fn pulse_injection_task(
                 break;
             }
             // Grab stokes from downsample
-            let mut s = input.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
-            if last_injection.elapsed() >= cadence {
-                last_injection = Instant::now();
-                currently_injecting = true;
-                i = 0;
-            }
-            if currently_injecting {
-                // Get the slice of fake pulse data
-                let this_sample = current_pulse.slice(s![.., i]);
-                // Add the current time slice of the fake pulse into the stream of real data
-                for (i, source) in s.iter_mut().zip(this_sample) {
-                    *i = *source as f32 + normal.sample(&mut rand::thread_rng());
+            match input.recv_ref_timeout(BLOCK_TIMEOUT) {
+                Ok(mut s) => {
+                    if last_injection.elapsed() >= cadence {
+                        last_injection = Instant::now();
+                        currently_injecting = true;
+                        i = 0;
+                    }
+                    if currently_injecting {
+                        // Get the slice of fake pulse data
+                        let this_sample = current_pulse.slice(s![.., i]);
+                        // Add the current time slice of the fake pulse into the stream of real data
+                        for (i, source) in s.iter_mut().zip(this_sample) {
+                            *i = *source as f32 + normal.sample(&mut rand::thread_rng());
+                        }
+                        i += 1;
+                        // If we've gone through all of it, stop and move to the next pulse
+                        if i == current_pulse.shape()[1] {
+                            currently_injecting = false;
+                            current_mmap =
+                                unsafe { Mmap::map(&File::open(pulse_cycle.next().unwrap())?)? };
+                            current_pulse = read_pulse(&current_mmap)?;
+                        }
+                    }
+                    output.send(s.clone())?;
                 }
-                i += 1;
-                // If we've gone through all of it, stop and move to the next pulse
-                if i == current_pulse.shape()[1] {
-                    currently_injecting = false;
-                    current_mmap = unsafe { Mmap::map(&File::open(pulse_cycle.next().unwrap())?)? };
-                    current_pulse = read_pulse(&current_mmap)?;
-                }
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Closed) => break,
+                Err(_) => unreachable!(),
             }
-            output.send(s.clone())?;
         }
     } else {
         // Missing the path, throw a warning and just connect the channels
@@ -97,8 +108,12 @@ pub fn pulse_injection_task(
                 info!("Injection task stopping");
                 break;
             }
-            let s = input.recv().ok_or_else(|| eyre!("Channel closed"))?;
-            output.send(s)?;
+            match input.recv_timeout(BLOCK_TIMEOUT) {
+                Ok(s) => output.send(s)?,
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Closed) => break,
+                Err(_) => unreachable!(),
+            }
         }
     }
     Ok(())

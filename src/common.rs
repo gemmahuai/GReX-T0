@@ -9,6 +9,8 @@ use num_complex::Complex;
 pub const CHANNELS: usize = 2048;
 /// How sure are we?
 pub const PACKET_CADENCE: f64 = 8.192e-6;
+/// Standard timeout for blocking ops
+pub const BLOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 pub type Stokes = ArrayVec<f32, CHANNELS>;
 

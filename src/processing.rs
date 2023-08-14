@@ -1,8 +1,11 @@
 //! Inter-thread processing (downsampling, etc)
-use crate::common::{Payload, Stokes, CHANNELS};
-use eyre::{bail, eyre};
+use crate::common::{Payload, Stokes, BLOCK_TIMEOUT, CHANNELS};
+use eyre::bail;
 use std::time::{Duration, Instant};
-use thingbuf::mpsc::blocking::{Sender, StaticReceiver, StaticSender};
+use thingbuf::mpsc::{
+    blocking::{Sender, StaticReceiver, StaticSender},
+    errors::RecvTimeoutError,
+};
 use tokio::sync::broadcast;
 use tracing::info;
 
@@ -36,7 +39,12 @@ pub fn downsample_task(
             info!("Downsample task stopping");
             break;
         }
-        let payload = receiver.recv_ref().ok_or_else(|| eyre!("Channel closed"))?;
+        let payload = match receiver.recv_ref_timeout(BLOCK_TIMEOUT) {
+            Ok(p) => p,
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Closed) => break,
+            Err(_) => unreachable!(),
+        };
         // Compute Stokes I
         let stokes = payload.stokes_i();
         // Send payload to dump (non-blocking)

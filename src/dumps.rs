@@ -1,7 +1,6 @@
 //! Dumping voltage data
 
-use crate::common::{Payload, CHANNELS};
-use eyre::eyre;
+use crate::common::{Payload, BLOCK_TIMEOUT, CHANNELS};
 use hdf5::File;
 use hifitime::prelude::*;
 use std::{
@@ -9,7 +8,10 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-use thingbuf::mpsc::blocking::{Receiver, Sender, StaticReceiver};
+use thingbuf::mpsc::{
+    blocking::{Receiver, Sender, StaticReceiver},
+    errors::RecvTimeoutError,
+};
 use tokio::{net::UdpSocket, sync::broadcast};
 use tracing::{info, warn};
 
@@ -82,12 +84,15 @@ pub async fn trigger_task(
     // Maybe even 0 would work, we don't expect data
     let mut buf = [0; 10];
     loop {
-        if shutdown.try_recv().is_ok() {
-            info!("Voltage ringbuffer trigger task stopping");
-            break;
+        tokio::select! {
+            _ = shutdown.recv() => {
+                info!("Voltage ringbuffer trigger task stopping");
+                break;
+            }
+            _ = sock.recv_from(&mut buf) => {
+                sender.send(())?;
+            }
         }
-        sock.recv_from(&mut buf).await?;
-        sender.send(())?;
     }
     Ok(())
 }
@@ -115,11 +120,15 @@ pub fn dump_task(
             }
         } else {
             // If we're not dumping, we're pushing data into the ringbuffer
-            let pl = payload_reciever
-                .recv_ref()
-                .ok_or_else(|| eyre!("Channel closed"))?;
-            let ring_ref = ring.next_push();
-            ring_ref.clone_from(&pl);
+            match payload_reciever.recv_ref_timeout(BLOCK_TIMEOUT) {
+                Ok(pl) => {
+                    let ring_ref = ring.next_push();
+                    ring_ref.clone_from(&pl);
+                }
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Closed) => break,
+                Err(_) => unreachable!(),
+            }
         }
     }
     Ok(())

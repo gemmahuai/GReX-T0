@@ -1,5 +1,5 @@
 use crate::capture::FIRST_PACKET;
-use crate::common::{Stokes, CHANNELS, PACKET_CADENCE};
+use crate::common::{Stokes, BLOCK_TIMEOUT, CHANNELS, PACKET_CADENCE};
 use byte_slice_cast::AsByteSlice;
 use eyre::eyre;
 use hifitime::prelude::*;
@@ -10,6 +10,7 @@ use std::fs::File;
 use std::path::Path;
 use std::{collections::HashMap, io::Write, str::FromStr, sync::atomic::Ordering};
 use thingbuf::mpsc::blocking::Receiver;
+use thingbuf::mpsc::errors::RecvTimeoutError;
 use tokio::sync::broadcast;
 use tracing::{debug, info};
 
@@ -29,10 +30,15 @@ pub fn dummy_consumer(
     mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
     info!("Starting dummy consumer");
-    while stokes_rcv.recv_ref().is_some() {
+    loop {
         if shutdown.try_recv().is_ok() {
             info!("Exfil task stopping");
             break;
+        }
+        match stokes_rcv.recv_ref_timeout(BLOCK_TIMEOUT) {
+            Ok(_) | Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Closed) => break,
+            Err(_) => unreachable!(),
         }
     }
     Ok(())
@@ -69,6 +75,7 @@ pub fn dada_consumer(
     let mut data_writer = dc.writer();
     info!("DADA header pushed, starting exfil to Heimdall");
     // Start the main consumer loop
+    // FIXME FIXME How do we timeout of grabbing a dada block?
     loop {
         // Grab the next psrdada block we can write to (BLOCKING)
         let mut block = data_writer.next().unwrap();
@@ -144,20 +151,24 @@ pub fn filterbank_consumer(
             break;
         }
         // Grab next stokes
-        let stokes = stokes_rcv
-            .recv_ref()
-            .ok_or_else(|| eyre!("Channel closed"))?;
-        // Timestamp first one
-        if first_payload {
-            first_payload = false;
-            let first_payload_time = payload_start
-                + (PACKET_CADENCE * FIRST_PACKET.load(Ordering::Acquire) as f64).seconds();
-            fb.tstart = Some(first_payload_time.to_mjd_utc_days());
-            // Write out the header
-            file.write_all(&fb.header_bytes()).unwrap();
+        match stokes_rcv.recv_ref_timeout(BLOCK_TIMEOUT) {
+            Ok(stokes) => {
+                // Timestamp first one
+                if first_payload {
+                    first_payload = false;
+                    let first_payload_time = payload_start
+                        + (PACKET_CADENCE * FIRST_PACKET.load(Ordering::Acquire) as f64).seconds();
+                    fb.tstart = Some(first_payload_time.to_mjd_utc_days());
+                    // Write out the header
+                    file.write_all(&fb.header_bytes()).unwrap();
+                }
+                // Stream to FB
+                file.write_all(&fb.pack(&stokes))?;
+            }
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Closed) => break,
+            Err(_) => unreachable!(),
         }
-        // Stream to FB
-        file.write_all(&fb.pack(&stokes))?;
     }
     Ok(())
 }

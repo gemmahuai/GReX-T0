@@ -6,7 +6,7 @@ use nalgebra::{DMatrix, DVector, RealField, SVD};
 use std::{fs, time::Duration};
 
 const CALIBRATION_ACCUMULATIONS: u32 = 131072; // Around 1 second at 8.192us
-const FIT_ORDER: usize = 6;
+const FIT_ORDER: usize = 5;
 
 fn write_to_file(data: &[f64], filename: &str) {
     fs::write(

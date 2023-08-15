@@ -53,9 +53,11 @@ async fn main() -> eyre::Result<()> {
         let mut quit = signal(SignalKind::quit()).unwrap();
         let mut int = signal(SignalKind::interrupt()).unwrap();
         tokio::select! {
-            _ = quit.recv() => sd_s.send(()).unwrap(),
-            _ = int.recv() => sd_s.send(()).unwrap(),
+            _ = quit.recv() => (),
+            _ = int.recv() => (),
         }
+        info!("Shutting down!");
+        sd_s.send(()).unwrap()
     });
     // Setup NTP
     let time_sync = if !cli.skip_ntp {

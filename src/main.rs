@@ -50,9 +50,11 @@ async fn main() -> eyre::Result<()> {
     let sd_exfil_r = sd_s.subscribe();
     let sd_trig_r = sd_s.subscribe();
     tokio::spawn(async move {
+        let mut term = signal(SignalKind::terminate()).unwrap();
         let mut quit = signal(SignalKind::quit()).unwrap();
         let mut int = signal(SignalKind::interrupt()).unwrap();
         tokio::select! {
+            _ = term.recv() => (),
             _ = quit.recv() => (),
             _ = int.recv() => (),
         }

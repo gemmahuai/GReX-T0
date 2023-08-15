@@ -78,17 +78,15 @@ async fn main() -> eyre::Result<()> {
     } else {
         device.blind_trigger()?
     };
-    // Perform the bandpass calibration routine
-    calibrate(&mut device);
-
     // Create a clone of the packet start time to hand off to the other thread
     let psc = packet_start;
     if cli.trig {
         device.force_pps();
     }
+    // Perform the bandpass calibration routine
+    calibrate(&mut device);
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
-
     // Fast path channels
     let (cap_s, cap_r) = CAPTURE_CHAN.split();
     let (dump_s, dump_r) = DUMP_CHAN.split();

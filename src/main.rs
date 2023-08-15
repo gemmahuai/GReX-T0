@@ -3,15 +3,13 @@ use core_affinity::CoreId;
 use eyre::bail;
 use grex_t0::{
     args,
-    //calibrate::calibrate,
+    calibrate::calibrate,
     capture,
     common::Payload,
     dumps::{self, DumpRing},
     exfil,
     fpga::Device,
-    injection,
-    monitoring,
-    processing,
+    injection, monitoring, processing,
 };
 use rsntp::SntpClient;
 use std::time::Duration;
@@ -81,7 +79,7 @@ async fn main() -> eyre::Result<()> {
         device.blind_trigger()?
     };
     // Perform the bandpass calibration routine
-    // calibrate(&mut device);
+    calibrate(&mut device);
 
     // Create a clone of the packet start time to hand off to the other thread
     let psc = packet_start;

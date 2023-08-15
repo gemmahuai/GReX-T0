@@ -19,7 +19,7 @@ pub fn calibrate(fpga: &mut Device) {
     // Trigger a pre-requant accumulation
     fpga.trigger_vacc();
     // Wait for the accumulation to complete
-    std::thread::sleep(Duration::from_secs(20));
+    std::thread::sleep(Duration::from_secs(10));
     // Then capture the spectrum
     let (a, b) = fpga.read_vacc();
     // FIXME write to file

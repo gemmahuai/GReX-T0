@@ -6,8 +6,8 @@ use std::{fs, time::Duration};
 use whittaker_smoother::whittaker_smoother;
 
 const CALIBRATION_ACCUMULATIONS: u32 = 131072; // Around 1 second at 8.192us
-const SMOOTH_LAMBDA: f64 = 10.0;
-const SMOOTH_ORDER: usize = 5;
+const SMOOTH_LAMBDA: f64 = 15.0;
+const SMOOTH_ORDER: usize = 3;
 
 fn write_to_file(data: &[f64], filename: &str) {
     fs::write(

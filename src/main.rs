@@ -16,6 +16,7 @@ use grex_t0::{
 use rsntp::SntpClient;
 use std::time::Duration;
 use thingbuf::mpsc::blocking::{channel, StaticChannel};
+use tokio::signal::unix::{signal, SignalKind};
 use tokio::{signal, sync::broadcast, try_join};
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -46,15 +47,11 @@ async fn main() -> eyre::Result<()> {
     let sd_exfil_r = sd_s.subscribe();
     let sd_trig_r = sd_s.subscribe();
     tokio::spawn(async move {
-        // Wait for ctrlc
-        match signal::ctrl_c().await {
-            Ok(()) => {
-                sd_s.send(()).unwrap();
-            }
-            Err(err) => {
-                eprintln!("Unable to listen for shutdown signal: {}", err);
-                // we also shut down in case of error
-            }
+        let mut quit = signal(SignalKind::quit()).unwrap();
+        let mut int = signal(SignalKind::interrupt()).unwrap();
+        tokio::select! {
+            _ = quit.recv() => sd_s.send(()).unwrap(),
+            _ = int.recv() => sd_s.send(()).unwrap(),
         }
     });
     // Setup NTP

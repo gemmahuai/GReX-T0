@@ -109,28 +109,32 @@ impl Device {
 
     /// Force a PPS pulse (timing will be inaccurate)
     #[allow(clippy::missing_panics_doc)]
-    pub fn force_pps(&mut self) {
-        self.fpga.pps_trig.write(true).unwrap();
-        self.fpga.pps_trig.write(false).unwrap();
+    pub fn force_pps(&mut self) -> eyre::Result<()> {
+        self.fpga.pps_trig.write(true)?;
+        self.fpga.pps_trig.write(false)?;
+        Ok(())
     }
 
     /// Trigger a vector accumulation (pre-requant)
-    pub fn trigger_vacc(&mut self) {
-        self.fpga.vacc_trig.write(true).unwrap();
-        self.fpga.vacc_trig.write(false).unwrap();
+    pub fn trigger_vacc(&mut self) -> eyre::Result<()> {
+        self.fpga.vacc_trig.write(true)?;
+        self.fpga.vacc_trig.write(false)?;
+        Ok(())
     }
 
     /// Read both vector accumulations
-    pub fn read_vacc(&mut self) -> (Vec<u64>, Vec<u64>) {
+    pub fn read_vacc(&mut self) -> eyre::Result<(Vec<u64>, Vec<u64>)> {
         // Read the spectra
-        let a = self.fpga.spec_a_vacc.read().unwrap();
-        let b = self.fpga.spec_b_vacc.read().unwrap();
-        dbg!(&a);
-        dbg!(&b);
+        let a = self.fpga.spec_a_vacc.read()?;
+        let b = self.fpga.spec_b_vacc.read()?;
         // Cast both to u64 (as they are U0)
         let a_cast = a.iter().map(|v| u64::from(*v)).collect();
         let b_cast = b.iter().map(|v| u64::from(*v)).collect();
-        (a_cast, b_cast)
+        Ok((a_cast, b_cast))
+    }
+
+    pub fn set_acc_n(&mut self, n: u32) -> eyre::Result<()> {
+        Ok(self.fpga.vacc_n.write(n.into())?)
     }
 }
 

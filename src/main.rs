@@ -81,10 +81,10 @@ async fn main() -> eyre::Result<()> {
     // Create a clone of the packet start time to hand off to the other thread
     let psc = packet_start;
     if cli.trig {
-        device.force_pps();
+        device.force_pps()?;
     }
     // Perform the bandpass calibration routine
-    calibrate(&mut device);
+    calibrate(&mut device)?;
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
     // Fast path channels

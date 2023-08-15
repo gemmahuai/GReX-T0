@@ -3,6 +3,7 @@
 use crate::{common::PACKET_CADENCE, fpga::Device};
 use eyre::eyre;
 use std::{fs, time::Duration};
+use tracing::info;
 use whittaker_smoother::whittaker_smoother;
 
 const CALIBRATION_ACCUMULATIONS: u32 = 131072; // Around 1 second at 8.192us
@@ -21,6 +22,7 @@ fn write_to_file(data: &[f64], filename: &str) {
 }
 
 pub fn calibrate(fpga: &mut Device) -> eyre::Result<()> {
+    info!("Calibrating bandpass");
     // Assuming the fpga has been setup (but not adjusted in requant gains),
     // Set the number of accumulations
     fpga.set_acc_n(CALIBRATION_ACCUMULATIONS)?;
@@ -51,5 +53,6 @@ pub fn calibrate(fpga: &mut Device) -> eyre::Result<()> {
     write_to_file(&a_smoothed, "a_smoothed");
     write_to_file(&b_norm, "b");
     write_to_file(&b_smoothed, "b_smoothed");
+    info!("Calibration complete!");
     Ok(())
 }

@@ -6,6 +6,7 @@ use casperfpga::transport::{
 };
 use casperfpga_derive::fpga_from_fpg;
 use eyre::bail;
+use fixed::{types::extra::U0, FixedU16};
 use hifitime::{prelude::*, UNIX_REF_EPOCH};
 use rsntp::SynchronizationResult;
 use std::net::{Ipv4Addr, SocketAddr};
@@ -135,6 +136,15 @@ impl Device {
 
     pub fn set_acc_n(&mut self, n: u32) -> eyre::Result<()> {
         Ok(self.fpga.vacc_n.write(n.into())?)
+    }
+
+    pub fn set_requant_gains(&mut self, a: &[u16], b: &[u16]) -> eyre::Result<()> {
+        // Cast
+        let a_fixed: Vec<_> = a.iter().map(|x| FixedU16::<U0>::from_num(*x)).collect();
+        let b_fixed: Vec<_> = b.iter().map(|x| FixedU16::<U0>::from_num(*x)).collect();
+        self.fpga.requant_gains_a.write(&a_fixed)?;
+        self.fpga.requant_gains_b.write(&b_fixed)?;
+        Ok(())
     }
 }
 

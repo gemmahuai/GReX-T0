@@ -61,7 +61,6 @@ async fn main() -> eyre::Result<()> {
     });
     // Setup NTP
     let time_sync = if !cli.skip_ntp {
-        // Setup NTP
         info!("Synchronizing time with NTP");
         let client = SntpClient::new();
         Some(client.synchronize(cli.ntp_addr).unwrap())
@@ -87,17 +86,16 @@ async fn main() -> eyre::Result<()> {
     calibrate(&mut device)?;
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
-    // Fast path channels
+    // These may not need to be static
     let (cap_s, cap_r) = CAPTURE_CHAN.split();
     let (dump_s, dump_r) = DUMP_CHAN.split();
-    // These may not need to be static
+    // Fast path channels
     let (ex_s, ex_r) = channel(FAST_PATH_CHANNEL_SIZE);
     let (inject_s, inject_r) = channel(FAST_PATH_CHANNEL_SIZE);
 
     // Less important channels, these don't have to be static
     let (trig_s, trig_r) = channel(5);
     let (stat_s, stat_r) = channel(100);
-    let (avg_s, avg_r) = channel(100);
 
     // Start the threads
     macro_rules! thread_spawn {
@@ -118,7 +116,7 @@ async fn main() -> eyre::Result<()> {
     let handles = thread_spawn!(
         (
             "collect",
-            monitoring::monitor_task(device, stat_r, avg_r, sd_mon_r)
+            monitoring::monitor_task(device, stat_r, sd_mon_r)
         ),
         (
             "injection",
@@ -136,7 +134,6 @@ async fn main() -> eyre::Result<()> {
                 cap_r,
                 inject_s,
                 dump_s,
-                avg_s,
                 cli.downsample_power,
                 sd_downsamp_r
             )

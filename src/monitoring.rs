@@ -1,4 +1,6 @@
-use crate::common::Stokes;
+use std::time::Duration;
+
+use crate::common::PACKET_CADENCE;
 use crate::fpga::Device;
 use crate::{capture::Stats, common::BLOCK_TIMEOUT};
 use actix_web::{dev::Server, get, App, HttpResponse, HttpServer, Responder};
@@ -12,6 +14,8 @@ use thingbuf::mpsc::errors::RecvTimeoutError;
 use tokio::sync::broadcast;
 use tracing::{info, warn};
 
+const MONITOR_ACCUMULATIONS: u32 = 1048576; // Around 8 second at 8.192us
+
 lazy_static! {
     static ref CHANNEL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
         "task_channel_backlog",
@@ -19,8 +23,12 @@ lazy_static! {
         &["target_channel"]
     )
     .unwrap();
-    static ref SPECTRUM_GAUGE: GaugeVec =
-        register_gauge_vec!("spectrum", "Average spectrum data", &["channel"]).unwrap();
+    static ref SPECTRUM_GAUGE: GaugeVec = register_gauge_vec!(
+        "spectrum",
+        "Average spectrum data",
+        &["channel", "polarization"]
+    )
+    .unwrap();
     static ref PACKET_GAUGE: IntGauge =
         register_int_gauge!("processed_packets", "Number of packets we've processed").unwrap();
     static ref DROP_GAUGE: IntGauge =
@@ -52,10 +60,42 @@ async fn metrics() -> impl Responder {
     HttpResponse::Ok().body(body_str)
 }
 
+fn update_spec(device: &mut Device) -> eyre::Result<()> {
+    device.set_acc_n(MONITOR_ACCUMULATIONS)?;
+    // Trigger a pre-requant accumulation
+    device.trigger_vacc()?;
+    // Wait for the accumulation to complete
+    std::thread::sleep(Duration::from_secs_f64(
+        MONITOR_ACCUMULATIONS as f64 * PACKET_CADENCE,
+    ));
+    // Then capture the spectrum
+    let (a, b) = device.read_vacc()?;
+    // And find the mean by dividing by N (and u32 max) to get 0-1
+    let a_norm: Vec<_> = a
+        .into_iter()
+        .map(|x| x as f64 / (MONITOR_ACCUMULATIONS as f64 * u32::MAX as f64))
+        .collect();
+    let b_norm: Vec<_> = b
+        .into_iter()
+        .map(|x| x as f64 / (MONITOR_ACCUMULATIONS as f64 * u32::MAX as f64))
+        .collect();
+    // Finally update the gauge
+    for (i, v) in a_norm.iter().enumerate() {
+        SPECTRUM_GAUGE
+            .with_label_values(&[&i.to_string(), "a"])
+            .set(*v);
+    }
+    for (i, v) in b_norm.iter().enumerate() {
+        SPECTRUM_GAUGE
+            .with_label_values(&[&i.to_string(), "b"])
+            .set(*v);
+    }
+    Ok(())
+}
+
 pub fn monitor_task(
-    device: Device,
+    mut device: Device,
     stats: Receiver<Stats>,
-    avg: Receiver<Stokes>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
     info!("Starting monitoring task!");
@@ -77,18 +117,10 @@ pub fn monitor_task(
             Err(_) => unreachable!(),
         }
 
-        // Update channel data
-        match avg.recv_ref_timeout(BLOCK_TIMEOUT) {
-            Ok(avg_spec) => {
-                for (i, v) in avg_spec.iter().enumerate() {
-                    SPECTRUM_GAUGE
-                        .with_label_values(&[&i.to_string()])
-                        .set(f64::from(*v));
-                }
-            }
-            Err(RecvTimeoutError::Timeout) => continue,
-            Err(RecvTimeoutError::Closed) => break,
-            Err(_) => unreachable!(),
+        // Update channel data from FPGA
+        match update_spec(&mut device) {
+            Ok(_) => (),
+            Err(e) => warn!("FPGA Error - {e}"),
         }
 
         // Metrics from the FPGA

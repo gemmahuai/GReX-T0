@@ -1,7 +1,6 @@
 //! Inter-thread processing (downsampling, etc)
 use crate::common::{Payload, Stokes, BLOCK_TIMEOUT, CHANNELS};
 use eyre::bail;
-use std::time::{Duration, Instant};
 use thingbuf::mpsc::{
     blocking::{Sender, StaticReceiver, StaticSender},
     errors::RecvTimeoutError,
@@ -9,30 +8,18 @@ use thingbuf::mpsc::{
 use tokio::sync::broadcast;
 use tracing::info;
 
-/// How long before we send one off to monitor
-const MONITOR_CADENCE: Duration = Duration::from_secs(10);
-
 #[allow(clippy::missing_panics_doc)]
 pub fn downsample_task(
     receiver: StaticReceiver<Payload>,
     sender: Sender<Stokes>,
     to_dumps: StaticSender<Payload>,
-    monitor: Sender<Stokes>,
     downsample_power: u32,
     mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
     info!("Starting downsample task");
-
-    // We have two averaging states, one for the normal downsample process and one for monitoring
-    // They differ in that the standard "thru" connection is averaging by counts and the monitoing one is averaging by time
     let downsamp_iters = 2usize.pow(downsample_power);
     let mut downsamp_buf = [0f32; CHANNELS];
     let mut local_downsamp_iters = 0;
-
-    // Here is the state for the monitoring part
-    let mut last_monitor = Instant::now();
-    let mut monitor_buf = [0f32; CHANNELS];
-    let mut local_monitor_iters = 0;
 
     loop {
         if shutdown.try_recv().is_ok() {
@@ -69,30 +56,9 @@ pub fn downsample_task(
                 .for_each(|v| *v /= local_downsamp_iters as f32);
             sender.send(downsamp_buf.try_into().unwrap())?;
 
-            // Then, use *this* average to save us some cycles for the monitoring
-            monitor_buf
-                .iter_mut()
-                .zip(&downsamp_buf)
-                .for_each(|(x, y)| *x += y);
-            local_monitor_iters += 1;
-
             // And reset averaging
             downsamp_buf.iter_mut().for_each(|v| *v = 0.0);
             local_downsamp_iters = 0;
-
-            //Check for monitor exit condition
-            if last_monitor.elapsed() >= MONITOR_CADENCE {
-                // And write averages
-                monitor_buf
-                    .iter_mut()
-                    .for_each(|v| *v /= local_monitor_iters as f32);
-                // Get a handle (non blocking) on the sender
-                monitor.send(monitor_buf.try_into().unwrap())?;
-                // Reset averaging and timers
-                last_monitor = Instant::now();
-                monitor_buf.iter_mut().for_each(|v| *v = 0.0);
-                local_monitor_iters = 0;
-            }
         }
     }
     Ok(())

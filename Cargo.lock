@@ -1150,7 +1150,6 @@ dependencies = [
  "lazy_static",
  "lending-iterator",
  "memmap2",
- "nalgebra",
  "ndarray",
  "num-complex",
  "prometheus",
@@ -1166,6 +1165,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.17",
+ "whittaker_smoother",
 ]
 
 [[package]]
@@ -2951,6 +2951,15 @@ dependencies = [
  "either",
  "libc",
  "once_cell",
+]
+
+[[package]]
+name = "whittaker_smoother"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a940cec0a16ed15b7ea2e2588fb871ebb7f982164f26a51f22901212651cda3c"
+dependencies = [
+ "nalgebra",
 ]
 
 [[package]]

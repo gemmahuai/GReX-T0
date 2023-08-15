@@ -69,7 +69,7 @@ async fn main() -> eyre::Result<()> {
     };
     // Setup the FPGA
     info!("Setting up SNAP");
-    let mut device = Device::new(cli.fpga_addr, cli.requant_gain);
+    let mut device = Device::new(cli.fpga_addr);
     device.reset()?;
     device.start_networking()?;
     let packet_start = if !cli.skip_ntp {

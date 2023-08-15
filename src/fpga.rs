@@ -1,5 +1,4 @@
 //! Control of the SNAP board running the gateware
-use crate::common::CHANNELS;
 use casperfpga::transport::{
     tapcp::{Platform, Tapcp},
     Transport,
@@ -19,18 +18,13 @@ pub struct Device {
 }
 
 impl Device {
-    pub fn new(addr: SocketAddr, requant_gain: u16) -> Self {
+    pub fn new(addr: SocketAddr) -> Self {
         let fpga = GrexFpga::new(Tapcp::connect(addr, Platform::SNAP).expect("Connection failed"))
             .expect("Failed to build FPGA object");
         assert!(
             fpga.transport.lock().unwrap().is_running().unwrap(),
             "SNAP board is not programmed/running"
         );
-        // Setup gain and requant factors
-        // Create vector of flat requant gains
-        let requant_gains = [requant_gain.into(); CHANNELS];
-        fpga.requant_gains_a.write(&requant_gains).unwrap();
-        fpga.requant_gains_b.write(&requant_gains).unwrap();
         fpga.fft_shift.write(4095u32.into()).unwrap();
         Self { fpga }
     }

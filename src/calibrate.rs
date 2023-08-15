@@ -9,7 +9,7 @@ use whittaker_smoother::whittaker_smoother;
 const CALIBRATION_ACCUMULATIONS: u32 = 131072; // Around 1 second at 8.192us
 const SMOOTH_LAMBDA: f64 = 50.0;
 const SMOOTH_ORDER: usize = 3;
-const REQUANT_SCALE: f64 = 8.0;
+const REQUANT_SCALE: f64 = 32.0;
 
 // fn write_to_file(data: &[f64], filename: &str) {
 //     fs::write(
@@ -67,9 +67,11 @@ pub fn calibrate(fpga: &mut Device) -> eyre::Result<()> {
         .into_iter()
         .map(|x| (1.0 / x) * b_max * REQUANT_SCALE)
         .collect();
-    // And set
-    let a_gain_int: Vec<_> = a_gain.into_iter().map(|x| x.round() as u16).collect();
-    let b_gain_int: Vec<_> = b_gain.into_iter().map(|x| x.round() as u16).collect();
+    // And set (zero out the DC terms)
+    let mut a_gain_int: Vec<_> = a_gain.into_iter().map(|x| x.round() as u16).collect();
+    let mut b_gain_int: Vec<_> = b_gain.into_iter().map(|x| x.round() as u16).collect();
+    a_gain_int[0..10].fill(0);
+    b_gain_int[0..10].fill(0);
     fpga.set_requant_gains(&a_gain_int, &b_gain_int)?;
     // FIXME write to file
     // write_to_file(&a_norm, "a");

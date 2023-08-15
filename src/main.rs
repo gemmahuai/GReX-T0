@@ -16,8 +16,11 @@ use grex_t0::{
 use rsntp::SntpClient;
 use std::time::Duration;
 use thingbuf::mpsc::blocking::{channel, StaticChannel};
-use tokio::signal::unix::{signal, SignalKind};
-use tokio::{signal, sync::broadcast, try_join};
+use tokio::{
+    signal::unix::{signal, SignalKind},
+    sync::broadcast,
+    try_join,
+};
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 

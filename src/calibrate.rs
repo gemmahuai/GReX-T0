@@ -2,25 +2,25 @@
 
 use crate::{common::PACKET_CADENCE, fpga::Device};
 use eyre::eyre;
-use std::time::Duration;
+use std::{fmt::Display, fs, time::Duration};
 use tracing::info;
 use whittaker_smoother::whittaker_smoother;
 
 const CALIBRATION_ACCUMULATIONS: u32 = 131072; // Around 1 second at 8.192us
 const SMOOTH_LAMBDA: f64 = 50.0;
 const SMOOTH_ORDER: usize = 3;
-const REQUANT_SCALE: f64 = 128.0;
+const REQUANT_SCALE: f64 = 131072.0; // Binary point of 2^17
 
-// fn write_to_file(data: &[f64], filename: &str) {
-//     fs::write(
-//         filename,
-//         data.iter()
-//             .map(|v| v.to_string())
-//             .collect::<Vec<_>>()
-//             .join("\n"),
-//     )
-//     .unwrap();
-// }
+fn write_to_file<T: Display>(data: &[T], filename: &str) {
+    fs::write(
+        filename,
+        data.iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+    .unwrap();
+}
 
 pub fn calibrate(fpga: &mut Device) -> eyre::Result<()> {
     info!("Calibrating bandpass");
@@ -31,7 +31,7 @@ pub fn calibrate(fpga: &mut Device) -> eyre::Result<()> {
     fpga.trigger_vacc()?;
     // Wait for the accumulation to complete
     std::thread::sleep(Duration::from_secs_f64(
-        CALIBRATION_ACCUMULATIONS as f64 * PACKET_CADENCE,
+        2.0 * CALIBRATION_ACCUMULATIONS as f64 * PACKET_CADENCE,
     ));
     // Then capture the spectrum
     let (a, b) = fpga.read_vacc()?;
@@ -49,35 +49,25 @@ pub fn calibrate(fpga: &mut Device) -> eyre::Result<()> {
         whittaker_smoother(&a_norm, SMOOTH_LAMBDA, SMOOTH_ORDER).ok_or(eyre!("Couldn't smooth"))?;
     let b_smoothed =
         whittaker_smoother(&b_norm, SMOOTH_LAMBDA, SMOOTH_ORDER).ok_or(eyre!("Couldn't smooth"))?;
-    // Find the first scaling factor by finding the max smoothed (ignoring the DC term)
-    let a_max = *a_smoothed[10..]
-        .iter()
-        .max_by(|a, b| a.total_cmp(b))
-        .unwrap();
-    let b_max = *b_smoothed[10..]
-        .iter()
-        .max_by(|a, b| a.total_cmp(b))
-        .unwrap();
     // Convert to "gains" by taking their inverse and scaling
-    let a_gain: Vec<_> = a_smoothed
+    // Type of requant is 18_17, so we need to scale to a fraction of 2^17
+    let mut a_gain: Vec<_> = a_smoothed
         .into_iter()
-        .map(|x| (1.0 / x) * a_max * REQUANT_SCALE)
+        .map(|x| ((1.0 / x) * REQUANT_SCALE).round() as u16)
         .collect();
-    let b_gain: Vec<_> = b_smoothed
+    let mut b_gain: Vec<_> = b_smoothed
         .into_iter()
-        .map(|x| (1.0 / x) * b_max * REQUANT_SCALE)
+        .map(|x| ((1.0 / x) * REQUANT_SCALE).round() as u16)
         .collect();
     // And set (zero out the DC terms)
-    let mut a_gain_int: Vec<_> = a_gain.into_iter().map(|x| x.round() as u16).collect();
-    let mut b_gain_int: Vec<_> = b_gain.into_iter().map(|x| x.round() as u16).collect();
-    a_gain_int[0..10].fill(0);
-    b_gain_int[0..10].fill(0);
-    fpga.set_requant_gains(&a_gain_int, &b_gain_int)?;
+    a_gain[0..10].fill(0);
+    b_gain[0..10].fill(0);
+    fpga.set_requant_gains(&a_gain, &b_gain)?;
     // FIXME write to file
-    // write_to_file(&a_norm, "a");
-    // write_to_file(&a_smoothed, "a_smoothed");
-    // write_to_file(&b_norm, "b");
-    // write_to_file(&b_smoothed, "b_smoothed");
+    write_to_file(&a_norm, "a");
+    write_to_file(&a_gain, "a_smoothed");
+    write_to_file(&b_norm, "b");
+    write_to_file(&b_gain, "b_smoothed");
     info!("Calibration complete!");
     Ok(())
 }

@@ -10,13 +10,14 @@ More implementation details to come.
 
 ```mermaid
 graph TD
-    A[UDP Capture and\nStateful dynamic reordering]
+    A[UDP Capture]
     A -->|8Gpbs| D[Downsample]
     D -->|2Gbps| F[Exfil]
     D -->|8Gbps| E[Voltage ringbuffer]
     G[UDP Voltage dump triggering] --> E
 
     A -->|Capture Statistics| K[Monitoring Webserver]
+    L[FPGA Metrics] -->|Spectrum Integrations| K
 
     H[Program Entry Point] --> I[FPGA Control and timing]
     I --> J[Task spawning]

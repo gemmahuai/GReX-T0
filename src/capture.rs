@@ -19,7 +19,7 @@ const SPECTRA_SIZE: usize = 8192;
 /// Total UDP payload size
 pub const PAYLOAD_SIZE: usize = SPECTRA_SIZE + TIMESTAMP_SIZE;
 /// Polling interval for stats
-const STATS_POLL_DURATION: Duration = Duration::from_secs(10);
+const STATS_POLL_DURATION: Duration = Duration::from_secs(20);
 /// Global atomic to hold the count of the first packet
 pub static FIRST_PACKET: AtomicU64 = AtomicU64::new(0);
 

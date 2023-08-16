@@ -1,6 +1,3 @@
-use std::time::Duration;
-
-use crate::common::PACKET_CADENCE;
 use crate::fpga::Device;
 use crate::{capture::Stats, common::BLOCK_TIMEOUT};
 use actix_web::{dev::Server, get, App, HttpResponse, HttpServer, Responder};
@@ -61,15 +58,8 @@ async fn metrics() -> impl Responder {
 }
 
 fn update_spec(device: &mut Device) -> eyre::Result<()> {
-    device.set_acc_n(MONITOR_ACCUMULATIONS)?;
-    // Trigger a pre-requant accumulation
-    device.trigger_vacc()?;
-    // Wait for the accumulation to complete
-    std::thread::sleep(Duration::from_secs_f64(
-        MONITOR_ACCUMULATIONS as f64 * PACKET_CADENCE,
-    ));
-    // Then capture the spectrum
-    let (a, b) = device.read_vacc()?;
+    // Capture the spectrum
+    let (a, b, stokes) = device.perform_both_vacc(MONITOR_ACCUMULATIONS)?;
     // And find the mean by dividing by N (and u32 max) to get 0-1
     let a_norm: Vec<_> = a
         .into_iter()
@@ -78,6 +68,10 @@ fn update_spec(device: &mut Device) -> eyre::Result<()> {
     let b_norm: Vec<_> = b
         .into_iter()
         .map(|x| x as f64 / (MONITOR_ACCUMULATIONS as f64 * u32::MAX as f64))
+        .collect();
+    let stokes_norm: Vec<_> = stokes
+        .into_iter()
+        .map(|x| x as f64 / (MONITOR_ACCUMULATIONS as f64 * u16::MAX as f64))
         .collect();
     // Finally update the gauge
     for (i, v) in a_norm.iter().enumerate() {
@@ -88,6 +82,11 @@ fn update_spec(device: &mut Device) -> eyre::Result<()> {
     for (i, v) in b_norm.iter().enumerate() {
         SPECTRUM_GAUGE
             .with_label_values(&[&i.to_string(), "b"])
+            .set(*v);
+    }
+    for (i, v) in stokes_norm.iter().enumerate() {
+        SPECTRUM_GAUGE
+            .with_label_values(&[&i.to_string(), "stokes"])
             .set(*v);
     }
     Ok(())
@@ -129,19 +128,19 @@ pub fn monitor_task(
             Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
 
-        match device.fpga.requant_a_overflow.read() {
-            Ok(v) => REQUANT_OVFL_GAUGE
-                .with_label_values(&["a"])
-                .set(u32::from(v).try_into().unwrap()),
-            Err(e) => warn!("SNAP Error - {e}, {:?}", e),
-        }
+        // match device.fpga.requant_a_overflow.read() {
+        //     Ok(v) => REQUANT_OVFL_GAUGE
+        //         .with_label_values(&["a"])
+        //         .set(u32::from(v).try_into().unwrap()),
+        //     Err(e) => warn!("SNAP Error - {e}, {:?}", e),
+        // }
 
-        match device.fpga.requant_b_overflow.read() {
-            Ok(v) => REQUANT_OVFL_GAUGE
-                .with_label_values(&["b"])
-                .set(u32::from(v).try_into().unwrap()),
-            Err(e) => warn!("SNAP Error - {e}, {:?}", e),
-        }
+        // match device.fpga.requant_b_overflow.read() {
+        //     Ok(v) => REQUANT_OVFL_GAUGE
+        //         .with_label_values(&["b"])
+        //         .set(u32::from(v).try_into().unwrap()),
+        //     Err(e) => warn!("SNAP Error - {e}, {:?}", e),
+        // }
 
         match device.fpga.transport.lock().unwrap().temperature() {
             Ok(v) => FPGA_TEMP.set(v.try_into().unwrap()),

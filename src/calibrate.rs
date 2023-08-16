@@ -1,73 +1,79 @@
 //! Pre pipeline calibration routine
 
-use crate::{common::PACKET_CADENCE, fpga::Device};
+use crate::fpga::Device;
 use eyre::eyre;
-use std::{fmt::Display, fs, time::Duration};
-use tracing::info;
+use median::Filter;
+use tracing::{info, warn};
 use whittaker_smoother::whittaker_smoother;
 
-const CALIBRATION_ACCUMULATIONS: u32 = 131072; // Around 1 second at 8.192us
+// Around 1 second at 8.192us
+const CALIBRATION_ACCUMULATIONS: u32 = 131072;
+// Whittaker Settings
 const SMOOTH_LAMBDA: f64 = 50.0;
 const SMOOTH_ORDER: usize = 3;
-const REQUANT_SCALE: f64 = 131072.0; // Binary point of 2^17
+// What fraction of the resulting requant byte do we want to scale to
+// This determines headroom for RFI
+const REQUANT_SCALE: f64 = 0.1;
+// Median filter width
+const MEDIAN_FILTER_WIDTH: usize = 50;
 
-fn write_to_file<T: Display>(data: &[T], filename: &str) {
-    fs::write(
-        filename,
-        data.iter()
-            .map(|v| v.to_string())
-            .collect::<Vec<_>>()
-            .join("\n"),
-    )
-    .unwrap();
+fn compute_gains(
+    scale: f64,
+    n: u32,
+    powers: &[u64],
+    lambda: f64,
+    order: usize,
+) -> eyre::Result<Vec<u16>> {
+    // Compute the mean power (in raw counts)
+    // Then convert to average voltage (as power is r^2 + i^2) by sqrt(x/2)
+    let norm_volt: Vec<_> = powers
+        .iter()
+        .map(|x| (*x as f64 / (2.0 * n as f64)).sqrt())
+        .collect();
+    // Then median filter (in frequency)
+    let mut filter = Filter::new(MEDIAN_FILTER_WIDTH);
+    let filtered = filter.consume(norm_volt);
+    // Smooth the voltage using the whittaker smoother
+    let mut smoothed =
+        whittaker_smoother(&filtered, lambda, order).ok_or(eyre!("Couldn't smooth"))?;
+    // Check to make sure there are no negative numbers or zeros
+    for (chan, val) in smoothed.iter_mut().enumerate() {
+        if *val <= 0.0 {
+            warn!(chan, val, "Curiously small counts from integrated spectrum");
+            *val = f64::EPSILON.powi(2);
+        }
+    }
+    // Then invert to scale to a fraction of 2^17 (As that's the binary point of the re and im parts out of the F-engine
+    // And multiply by some gain factor <1 to set where the nominal spectrum should line
+    // And round to u16 to make it fit in our u16
+    let gain: Vec<_> = smoothed
+        .into_iter()
+        .map(|x| (scale / (x / f64::from(1 << 17))).round() as u16)
+        .collect();
+    Ok(gain)
 }
 
 pub fn calibrate(fpga: &mut Device) -> eyre::Result<()> {
     info!("Calibrating bandpass");
     // Assuming the fpga has been setup (but not adjusted in requant gains),
-    // Set the number of accumulations
-    fpga.set_acc_n(CALIBRATION_ACCUMULATIONS)?;
-    // Trigger a pre-requant accumulation
-    fpga.trigger_vacc()?;
-    // Wait for the accumulation to complete
-    std::thread::sleep(Duration::from_secs_f64(
-        2.0 * CALIBRATION_ACCUMULATIONS as f64 * PACKET_CADENCE,
-    ));
-    // Then capture the spectrum
-    let (a, b) = fpga.read_vacc()?;
-    // And find the mean by dividing by N
-    let a_norm: Vec<_> = a
-        .into_iter()
-        .map(|x| x as f64 / CALIBRATION_ACCUMULATIONS as f64)
-        .collect();
-    let b_norm: Vec<_> = b
-        .into_iter()
-        .map(|x| x as f64 / CALIBRATION_ACCUMULATIONS as f64)
-        .collect();
-    // Smooth the data out
-    let a_smoothed =
-        whittaker_smoother(&a_norm, SMOOTH_LAMBDA, SMOOTH_ORDER).ok_or(eyre!("Couldn't smooth"))?;
-    let b_smoothed =
-        whittaker_smoother(&b_norm, SMOOTH_LAMBDA, SMOOTH_ORDER).ok_or(eyre!("Couldn't smooth"))?;
-    // Convert to "gains" by taking their inverse and scaling
-    // Type of requant is 18_17, so we need to scale to a fraction of 2^17
-    let mut a_gain: Vec<_> = a_smoothed
-        .into_iter()
-        .map(|x| ((1.0 / (x.sqrt() / 2.0)) * REQUANT_SCALE).round() as u16)
-        .collect();
-    let mut b_gain: Vec<_> = b_smoothed
-        .into_iter()
-        .map(|x| ((1.0 / (x.sqrt() / 2.0)) * REQUANT_SCALE).round() as u16)
-        .collect();
-    // And set (zero out the DC terms)
-    a_gain[0..10].fill(0);
-    b_gain[0..10].fill(0);
+    // Capture the spectrum
+    let (a, b) = fpga.perform_spec_vacc(CALIBRATION_ACCUMULATIONS)?;
+    // Compute the gains
+    let a_gain = compute_gains(
+        REQUANT_SCALE,
+        CALIBRATION_ACCUMULATIONS,
+        &a,
+        SMOOTH_LAMBDA,
+        SMOOTH_ORDER,
+    )?;
+    let b_gain = compute_gains(
+        REQUANT_SCALE,
+        CALIBRATION_ACCUMULATIONS,
+        &b,
+        SMOOTH_LAMBDA,
+        SMOOTH_ORDER,
+    )?;
     fpga.set_requant_gains(&a_gain, &b_gain)?;
-    // FIXME write to file
-    write_to_file(&a_norm, "a");
-    write_to_file(&a_gain, "a_smoothed");
-    write_to_file(&b_norm, "b");
-    write_to_file(&b_gain, "b_smoothed");
     info!("Calibration complete!");
     Ok(())
 }

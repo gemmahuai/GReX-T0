@@ -36,7 +36,8 @@ pub fn stokes_i(a: &Channels, b: &Channels) -> Stokes {
     // This allocated uninit, so we gucci
     let mut stokes = ArrayVec::new();
     for (a, b) in a.iter().zip(b) {
-        stokes.push(f32::from(a.abs_squared() + b.abs_squared()) / f32::from(u16::MAX));
+        // Source is Fix8_7, so x^2 is Fix16_14, sum won't have bit growth
+        stokes.push(f32::from(a.abs_squared() + b.abs_squared()) / f32::from(1u16 << 14));
     }
     stokes
 }

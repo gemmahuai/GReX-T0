@@ -53,11 +53,11 @@ pub fn calibrate(fpga: &mut Device) -> eyre::Result<()> {
     // Type of requant is 18_17, so we need to scale to a fraction of 2^17
     let mut a_gain: Vec<_> = a_smoothed
         .into_iter()
-        .map(|x| ((1.0 / x) * REQUANT_SCALE).round() as u16)
+        .map(|x| ((1.0 / (x.sqrt() / 2.0)) * REQUANT_SCALE).round() as u16)
         .collect();
     let mut b_gain: Vec<_> = b_smoothed
         .into_iter()
-        .map(|x| ((1.0 / x) * REQUANT_SCALE).round() as u16)
+        .map(|x| ((1.0 / (x.sqrt() / 2.0)) * REQUANT_SCALE).round() as u16)
         .collect();
     // And set (zero out the DC terms)
     a_gain[0..10].fill(0);

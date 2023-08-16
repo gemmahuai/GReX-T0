@@ -17,7 +17,6 @@ graph TD
     G[UDP Voltage dump triggering] --> E
 
     A -->|Capture Statistics| K[Monitoring Webserver]
-    D -->|Spectrum integration| K
 
     H[Program Entry Point] --> I[FPGA Control and timing]
     I --> J[Task spawning]

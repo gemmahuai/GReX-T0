@@ -35,6 +35,7 @@ color-eyre = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 whittaker_smoother = "0.1"
+median = "0.3"
 
 [lib]
 name = "grex_t0"

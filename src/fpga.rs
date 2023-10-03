@@ -11,6 +11,8 @@ use rsntp::SynchronizationResult;
 use std::net::{Ipv4Addr, SocketAddr};
 use tracing::debug;
 
+use crate::common::PACKET_CADENCE;
+
 fpga_from_fpg!(GrexFpga, "gateware/grex_gateware.fpg");
 
 pub struct Device {
@@ -110,26 +112,87 @@ impl Device {
         Ok(())
     }
 
-    /// Trigger a vector accumulation (pre-requant)
-    pub fn trigger_vacc(&mut self) -> eyre::Result<()> {
-        self.fpga.vacc_trig.write(true)?;
-        self.fpga.vacc_trig.write(false)?;
+    /// Trigger, wait, and read spectrum VACC,
+    /// reinterpreting fixed point to bits
+    pub fn perform_spec_vacc(&mut self, n: u32) -> eyre::Result<(Vec<u64>, Vec<u64>)> {
+        // Set the number of accumulations
+        self.fpga.spec_vacc_n.write(n.into())?;
+        // Trigger a pre-requant accumulation
+        self.trigger_spec_vacc()?;
+        // Wait for the accumulation to complete (plus a little extra wiggle room)
+        std::thread::sleep(std::time::Duration::from_secs_f64(
+            2.0 * n as f64 * PACKET_CADENCE,
+        ));
+        // Then capture the spectrum
+        let (a, b) = self.read_spec_vacc()?;
+        // And return!
+        Ok((a, b))
+    }
+
+    /// Trigger, wait, and read stokes VACC,
+    /// reinterpreting fixed point to bits
+    pub fn perform_stokes_vacc(&mut self, n: u32) -> eyre::Result<Vec<u64>> {
+        // Set the number of accumulations
+        self.fpga.stokes_vacc_n.write(n.into())?;
+        // Trigger an accumulation
+        self.trigger_stokes_vacc()?;
+        // Wait for the accumulation to complete (plus a little extra wiggle room)
+        std::thread::sleep(std::time::Duration::from_secs_f64(
+            2.0 * n as f64 * PACKET_CADENCE,
+        ));
+        // Then capture the spectrum
+        let stokes = self.read_stokes_vacc()?;
+        // And return!
+        Ok(stokes)
+    }
+
+    /// Trigger and wait for both vaccs simultaneously
+    pub fn perform_both_vacc(&mut self, n: u32) -> eyre::Result<(Vec<u64>, Vec<u64>, Vec<u64>)> {
+        // Set the number of accumulations
+        self.fpga.stokes_vacc_n.write(n.into())?;
+        self.fpga.spec_vacc_n.write(n.into())?;
+        // Trigger a pre-requant accumulation
+        self.trigger_stokes_vacc()?;
+        self.trigger_spec_vacc()?;
+        std::thread::sleep(std::time::Duration::from_secs_f64(
+            2.0 * n as f64 * PACKET_CADENCE,
+        ));
+        // Then capture the data
+        let stokes = self.read_stokes_vacc()?;
+        let (a, b) = self.read_spec_vacc()?;
+        Ok((a, b, stokes))
+    }
+
+    /// Trigger a pre-requant vector accumulation
+    fn trigger_spec_vacc(&mut self) -> eyre::Result<()> {
+        self.fpga.spec_vacc_trig.write(true)?;
+        self.fpga.spec_vacc_trig.write(false)?;
         Ok(())
     }
 
-    /// Read both vector accumulations
-    pub fn read_vacc(&mut self) -> eyre::Result<(Vec<u64>, Vec<u64>)> {
+    /// Trigger a stokes accumulation
+    fn trigger_stokes_vacc(&mut self) -> eyre::Result<()> {
+        self.fpga.stokes_vacc_trig.write(true)?;
+        self.fpga.stokes_vacc_trig.write(false)?;
+        Ok(())
+    }
+
+    /// Read both vector accumulations from the spectrum vacc
+    fn read_spec_vacc(&mut self) -> eyre::Result<(Vec<u64>, Vec<u64>)> {
         // Read the spectra
         let a = self.fpga.spec_a_vacc.read()?;
         let b = self.fpga.spec_b_vacc.read()?;
-        // Cast both to u64 (as they are U0)
-        let a_cast = a.iter().map(|v| u64::from(*v)).collect();
-        let b_cast = b.iter().map(|v| u64::from(*v)).collect();
+        let a_cast = a.iter().map(|v| v.to_bits()).collect();
+        let b_cast = b.iter().map(|v| v.to_bits()).collect();
         Ok((a_cast, b_cast))
     }
 
-    pub fn set_acc_n(&mut self, n: u32) -> eyre::Result<()> {
-        Ok(self.fpga.vacc_n.write(n.into())?)
+    /// Read stokes vacc
+    fn read_stokes_vacc(&mut self) -> eyre::Result<Vec<u64>> {
+        // Read the spectra
+        let stokes = self.fpga.stokes_vacc.read()?;
+        let stokes_cast = stokes.iter().map(|v| v.to_bits()).collect();
+        Ok(stokes_cast)
     }
 
     pub fn set_requant_gains(&mut self, a: &[u16], b: &[u16]) -> eyre::Result<()> {

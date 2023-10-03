@@ -1124,6 +1124,7 @@ dependencies = [
  "hifitime",
  "lazy_static",
  "lending-iterator",
+ "median",
  "memmap2",
  "ndarray",
  "num-complex",
@@ -1610,6 +1611,15 @@ name = "md5"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
+
+[[package]]
+name = "median"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "993f81eac178937d7d54dc7ba7bddd70a526bca92b36d95016add46f59d19754"
+dependencies = [
+ "generic-array",
+]
 
 [[package]]
 name = "memchr"

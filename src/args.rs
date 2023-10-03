@@ -39,6 +39,9 @@ pub struct Cli {
     /// NTP server to synchronize against
     #[arg(long, default_value = "time.google.com")]
     pub ntp_addr: String,
+    /// Manual requantization gain (disables bandpass flattening)
+    #[arg(long)]
+    pub requant_gain: Option<u16>,
     /// Force a pps trigger
     #[arg(long)]
     pub trig: bool,

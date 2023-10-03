@@ -5,7 +5,7 @@ use grex_t0::{
     args,
     calibrate::calibrate,
     capture,
-    common::Payload,
+    common::{Payload, CHANNELS},
     dumps::{self, DumpRing},
     exfil,
     fpga::Device,
@@ -82,8 +82,13 @@ async fn main() -> eyre::Result<()> {
     if cli.trig {
         device.force_pps()?;
     }
-    // Perform the bandpass calibration routine
-    calibrate(&mut device)?;
+    // Perform the bandpass calibration routine (if needed)
+    if let Some(requant_gain) = cli.requant_gain {
+        let gain = [requant_gain; CHANNELS];
+        device.set_requant_gains(&gain, &gain)?;
+    } else {
+        calibrate(&mut device)?;
+    }
     // Create the dump ring
     let ring = DumpRing::new(cli.vbuf_power);
     // These may not need to be static

@@ -54,7 +54,7 @@ pub fn downsample_task(
             downsamp_buf
                 .iter_mut()
                 .for_each(|v| *v /= local_downsamp_iters as f32);
-            sender.send(downsamp_buf.try_into().unwrap())?;
+            sender.send(downsamp_buf.into())?;
 
             // And reset averaging
             downsamp_buf.iter_mut().for_each(|v| *v = 0.0);

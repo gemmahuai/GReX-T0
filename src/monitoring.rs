@@ -119,12 +119,12 @@ pub fn monitor_task(
         // Update channel data from FPGA
         match update_spec(&mut device) {
             Ok(_) => (),
-            Err(e) => warn!("FPGA Error - {e}"),
+            Err(e) => warn!("SNAP Error - {e}"),
         }
 
         // Metrics from the FPGA
         match device.fpga.fft_overflow_cnt.read() {
-            Ok(v) => FFT_OVFL_GAUGE.set(u32::from(v).try_into().unwrap()),
+            Ok(v) => FFT_OVFL_GAUGE.set(u32::from(v).into()),
             Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
 
@@ -143,7 +143,7 @@ pub fn monitor_task(
         // }
 
         match device.fpga.transport.lock().unwrap().temperature() {
-            Ok(v) => FPGA_TEMP.set(v.try_into().unwrap()),
+            Ok(v) => FPGA_TEMP.set(v.into()),
             Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
 

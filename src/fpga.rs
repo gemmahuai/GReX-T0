@@ -79,7 +79,7 @@ impl Device {
         let trigger_time = next_sec + 0.1.seconds();
         // PPS will trigger on the next starting edge after we arm
         let start_time = next_sec + 1.seconds();
-        std::thread::sleep((trigger_time - now).try_into().unwrap());
+        std::thread::sleep((trigger_time - now).into());
         // Send the trigger
         self.fpga.arm.write(true).unwrap();
         self.fpga.arm.write(false).unwrap();
@@ -96,7 +96,7 @@ impl Device {
         let trigger_time = next_sec + 0.1.seconds();
         // PPS will trigger on the next starting edge after we arm
         let start_time = next_sec + 1.seconds();
-        std::thread::sleep((trigger_time - now).try_into().unwrap());
+        std::thread::sleep((trigger_time - now).into());
         // Send the trigger
         self.fpga.arm.write(true).unwrap();
         self.fpga.arm.write(false).unwrap();

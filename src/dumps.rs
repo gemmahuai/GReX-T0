@@ -1,8 +1,9 @@
 //! Dumping voltage data
 
 use crate::common::{Payload, BLOCK_TIMEOUT, CHANNELS};
-use hdf5::File;
+use crate::exfil::{BANDWIDTH, HIGHBAND_MID_FREQ};
 use hifitime::prelude::*;
+use ndarray::prelude::*;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
@@ -41,33 +42,69 @@ impl DumpRing {
     pub fn dump(&self, start_time: &Epoch, path: &Path) -> eyre::Result<()> {
         // Filename with ISO 8610 standard format
         let fmt = Format::from_str("%Y%m%dT%H%M%S").unwrap();
-        let filename = format!("grex_dump-{}.h5", Formatter::new(Epoch::now()?, fmt));
+        let filename = format!("grex_dump-{}.nc", Formatter::new(Epoch::now()?, fmt));
         let file_path = path.join(filename);
-        let file = File::create(file_path)?;
-        let ds = file
-            .new_dataset::<i8>()
-            .chunk((1, 2, CHANNELS, 2))
-            .shape((self.container.len(), 2, CHANNELS, 2))
-            .create("voltages")?;
-        // And then write in chunks, draining the buffer
-        let mut idx = 0;
-        let mut payload_time;
+        let mut file = netcdf::create(file_path)?;
+
+        // Add the file dimensions
+        file.add_dimension("mjd", self.capacity)?;
+        file.add_dimension("pol", 2)?;
+        file.add_dimension("freq", CHANNELS)?;
+        file.add_dimension("reim", 2)?;
+
+        // Describe the dimensions
+        let mut mjd = file.add_variable::<f64>("mjd", &["mjd"])?;
+        mjd.put_attribute("units", "Days")?;
+        mjd.put_attribute("long_name", "Modified Julian Date (UTC)")?;
+        // Fill times by traversing the payloads in order
         let mut read_idx = self.write_index;
+        let mut idx = 0;
         loop {
-            let pl = self.container[read_idx];
-            ds.write_slice(&pl.into_ndarray(), (idx, .., .., ..))?;
-            payload_time = pl.real_time(start_time);
+            // Get paload ptr
+            let pl = self.container.get(read_idx).unwrap();
+            mjd.put_value(pl.real_time(start_time).to_mjd_utc_days(), idx)?;
+            // Increment the pointers
             idx += 1;
-            // Increment read_index, mod the size
-            read_idx = (read_idx + 1) & (self.capacity - 1);
+            read_idx = (read_idx + 1) % (self.capacity - 1);
             // Check if we've gone all the way around
             if read_idx == self.write_index {
                 break;
             }
         }
-        // Set the time attribute
-        let attr = ds.new_attr::<i64>().create("timestamp")?;
-        attr.write_scalar(&payload_time.to_mjd_utc_days())?;
+
+        let mut pol = file.add_string_variable("pol", &["pol"])?;
+        pol.put_attribute("long_name", "Polarization")?;
+        pol.put_string("a", 0)?;
+        pol.put_string("b", 1)?;
+
+        let mut freq = file.add_variable::<f64>("freq", &["freq"])?;
+        freq.put_attribute("units", "Megahertz")?;
+        freq.put_attribute("long_name", "Frequency")?;
+        let freqs = Array::linspace(HIGHBAND_MID_FREQ, HIGHBAND_MID_FREQ - BANDWIDTH, CHANNELS);
+        freq.put(.., freqs.view())?;
+
+        let mut reim = file.add_string_variable("reim", &["reim"])?;
+        reim.put_attribute("long_name", "Complex")?;
+        reim.put_string("real", 0)?;
+        reim.put_string("imaginary", 1)?;
+
+        // Setup our data block
+        let mut voltages = file.add_variable::<i8>("voltages", &["mjd", "pol", "freq", "reim"])?;
+        voltages.put_attribute("long_name", "Channelized Voltages")?;
+        voltages.put_attribute("units", "Volts")?;
+
+        // Write to the file, one timestep at a time
+        idx = 0;
+        read_idx = self.write_index;
+        loop {
+            let pl = self.container.get(read_idx).unwrap();
+            voltages.put((idx, .., .., ..), pl.into_ndarray().view())?;
+            idx += 1;
+            read_idx = (read_idx + 1) & (self.capacity - 1);
+            if read_idx == self.write_index {
+                break;
+            }
+        }
         Ok(())
     }
 }

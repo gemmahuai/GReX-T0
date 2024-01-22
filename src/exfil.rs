@@ -15,8 +15,8 @@ use tokio::sync::broadcast;
 use tracing::{debug, info};
 
 // Set by hardware (in MHz)
-const HIGHBAND_MID_FREQ: f64 = 1529.93896484375; // Highend of band - half the channel spacing
-const BANDWIDTH: f64 = 250.0;
+pub const HIGHBAND_MID_FREQ: f64 = 1529.93896484375; // Highend of band - half the channel spacing
+pub const BANDWIDTH: f64 = 250.0;
 
 /// Convert a chronno `DateTime` into a heimdall-compatible timestamp string
 fn heimdall_timestamp(time: &Epoch) -> String {

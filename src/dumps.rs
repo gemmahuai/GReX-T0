@@ -25,7 +25,7 @@ pub struct DumpRing {
 impl DumpRing {
     pub fn next_push(&mut self) -> &mut Payload {
         let before_idx = self.write_index;
-        self.write_index = (self.write_index + 1) % (self.capacity - 1);
+        self.write_index = (self.write_index + 1) % self.capacity;
         &mut self.container[before_idx]
     }
 
@@ -68,7 +68,7 @@ impl DumpRing {
             tdb.put_value(pl.real_time(start_time).to_tdb_days_since_j2000(), idx)?;
             // Increment the pointers
             idx += 1;
-            read_idx = (read_idx + 1) % (self.capacity - 1);
+            read_idx = (read_idx + 1) % self.capacity;
             // Check if we've gone all the way around
             if read_idx == self.write_index {
                 break;
@@ -103,7 +103,7 @@ impl DumpRing {
             let pl = self.container.get(read_idx).unwrap();
             voltages.put((idx, .., .., ..), pl.into_ndarray().view())?;
             idx += 1;
-            read_idx = (read_idx + 1) % (self.capacity - 1);
+            read_idx = (read_idx + 1) % self.capacity;
             if read_idx == self.write_index {
                 break;
             }

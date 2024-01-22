@@ -55,10 +55,7 @@ impl DumpRing {
         // Describe the dimensions
         let mut tdb = file.add_variable::<f64>("time", &["time"])?;
         tdb.put_attribute("units", "Days")?;
-        tdb.put_attribute(
-            "long_name",
-            "Days since Dynamic Barycentric Time (TDB) J2000",
-        )?;
+        tdb.put_attribute("long_name", "Dynamic Barycentric Time (TDB) since J2000")?;
         // Fill times by traversing the payloads in order
         let mut read_idx = self.write_index;
         let mut idx = 0;

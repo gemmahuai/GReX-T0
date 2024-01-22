@@ -25,7 +25,7 @@ pub struct DumpRing {
 impl DumpRing {
     pub fn next_push(&mut self) -> &mut Payload {
         let before_idx = self.write_index;
-        self.write_index = (self.write_index + 1) & (self.capacity - 1);
+        self.write_index = (self.write_index + 1) % (self.capacity - 1);
         &mut self.container[before_idx]
     }
 
@@ -47,22 +47,25 @@ impl DumpRing {
         let mut file = netcdf::create(file_path)?;
 
         // Add the file dimensions
-        file.add_dimension("mjd", self.capacity)?;
+        file.add_dimension("time", self.capacity)?;
         file.add_dimension("pol", 2)?;
         file.add_dimension("freq", CHANNELS)?;
         file.add_dimension("reim", 2)?;
 
         // Describe the dimensions
-        let mut mjd = file.add_variable::<f64>("mjd", &["mjd"])?;
-        mjd.put_attribute("units", "Days")?;
-        mjd.put_attribute("long_name", "Modified Julian Date (UTC)")?;
+        let mut tdb = file.add_variable::<f64>("time", &["time"])?;
+        tdb.put_attribute("units", "Days")?;
+        tdb.put_attribute(
+            "long_name",
+            "Days since Dynamic Barycentric Time (TDB) J2000",
+        )?;
         // Fill times by traversing the payloads in order
         let mut read_idx = self.write_index;
         let mut idx = 0;
         loop {
-            // Get paload ptr
+            // Get payload ptr
             let pl = self.container.get(read_idx).unwrap();
-            mjd.put_value(pl.real_time(start_time).to_mjd_utc_days(), idx)?;
+            tdb.put_value(pl.real_time(start_time).to_tdb_days_since_j2000(), idx)?;
             // Increment the pointers
             idx += 1;
             read_idx = (read_idx + 1) % (self.capacity - 1);
@@ -100,7 +103,7 @@ impl DumpRing {
             let pl = self.container.get(read_idx).unwrap();
             voltages.put((idx, .., .., ..), pl.into_ndarray().view())?;
             idx += 1;
-            read_idx = (read_idx + 1) & (self.capacity - 1);
+            read_idx = (read_idx + 1) % (self.capacity - 1);
             if read_idx == self.write_index {
                 break;
             }

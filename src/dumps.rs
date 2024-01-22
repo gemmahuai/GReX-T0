@@ -92,7 +92,7 @@ impl DumpRing {
         reim.put_string("imaginary", 1)?;
 
         // Setup our data block
-        let mut voltages = file.add_variable::<i8>("voltages", &["mjd", "pol", "freq", "reim"])?;
+        let mut voltages = file.add_variable::<i8>("voltages", &["time", "pol", "freq", "reim"])?;
         voltages.put_attribute("long_name", "Channelized Voltages")?;
         voltages.put_attribute("units", "Volts")?;
 

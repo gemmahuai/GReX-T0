@@ -65,6 +65,7 @@ async fn main() -> eyre::Result<()> {
         let client = SntpClient::new();
         Some(client.synchronize(cli.ntp_addr).unwrap())
     } else {
+        info!("Skipping NTP time sync");
         None
     };
     // Setup the FPGA
@@ -73,8 +74,10 @@ async fn main() -> eyre::Result<()> {
     device.reset()?;
     device.start_networking()?;
     let packet_start = if !cli.skip_ntp {
+        info!("Triggering the flow of packets via PPS");
         device.trigger(&time_sync.unwrap())?
     } else {
+        info!("Blindly triggering (no GPS), timing will be off");
         device.blind_trigger()?
     };
     // Create a clone of the packet start time to hand off to the other thread
@@ -84,9 +87,11 @@ async fn main() -> eyre::Result<()> {
     }
     // Perform the bandpass calibration routine (if needed)
     if let Some(requant_gain) = cli.requant_gain {
+        info!("Setting requant gains directly without bandpass calibration");
         let gain = [requant_gain; CHANNELS];
         device.set_requant_gains(&gain, &gain)?;
     } else {
+        info!("Calibrating bandpass");
         calibrate(&mut device)?;
     }
     // Create the dump ring

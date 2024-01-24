@@ -54,7 +54,6 @@ fn compute_gains(
 }
 
 pub fn calibrate(fpga: &mut Device) -> eyre::Result<()> {
-    info!("Calibrating bandpass");
     // Assuming the fpga has been setup (but not adjusted in requant gains),
     // Capture the spectrum
     let (a, b) = fpga.perform_spec_vacc(CALIBRATION_ACCUMULATIONS)?;

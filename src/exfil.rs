@@ -52,6 +52,7 @@ pub fn dada_consumer(
     window_size: usize,
     mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
+    info!("Starting DADA consumer");
     // DADA window
     let mut stokes_cnt = 0usize;
     // We will capture the timestamp on the first packet
@@ -131,6 +132,7 @@ pub fn filterbank_consumer(
     path: &Path,
     mut shutdown: broadcast::Receiver<()>,
 ) -> eyre::Result<()> {
+    info!("Starting filterbank consumer");
     // Filename with ISO 8610 standard format
     let fmt = Format::from_str("%Y%m%dT%H%M%S").unwrap();
     let filename = format!("grex-{}.fil", Formatter::new(Epoch::now()?, fmt));

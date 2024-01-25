@@ -59,7 +59,7 @@ impl Device {
         self.fpga.dest_ip.write(u32::from(dest_ip).into())?;
         self.fpga
             .gbe1
-            .set_single_arp_entry(dest_ip, &[0, 0, 0, 0, 0, 0])?;
+            .set_single_arp_entry(dest_ip, &[0x80, 0x61, 0x5f, 0x0c, 0x71, 0x26])?;
         // Turn on the core
         self.fpga.tx_en.write(true)?;
         // Check the link

@@ -39,7 +39,7 @@ impl Device {
     }
 
     /// Gets the 10 GbE data connection in working order
-    pub fn start_networking(&mut self) -> eyre::Result<()> {
+    pub fn start_networking(&mut self, mac: &[u8; 6]) -> eyre::Result<()> {
         let dest_ip: Ipv4Addr = "192.168.0.1".parse()?;
         let dest_port = 60000u16;
         // Disable
@@ -57,9 +57,7 @@ impl Device {
         // Set destination registers
         self.fpga.dest_port.write(dest_port.into())?;
         self.fpga.dest_ip.write(u32::from(dest_ip).into())?;
-        self.fpga
-            .gbe1
-            .set_single_arp_entry(dest_ip, &[0x80, 0x61, 0x5f, 0x0c, 0x71, 0x26])?;
+        self.fpga.gbe1.set_single_arp_entry(dest_ip, mac)?;
         // Turn on the core
         self.fpga.tx_en.write(true)?;
         // Check the link

@@ -14,6 +14,9 @@ pub struct Cli {
     /// CPU cores to which we'll build tasks. They should share a NUMA node.
     #[arg(long, default_value = "0:7", value_parser = parse_core_range)]
     pub core_range: RangeInclusive<usize>,
+    /// MAC address of the interface which data comes in on (used in ARP)
+    #[arg(long, value_parser=parse_mac)]
+    pub mac: [u8; 6],
     /// Port which we expect packets to be directed to
     #[arg(long, default_value_t = 60000)]
     #[clap(value_parser = clap::value_parser!(u16).range(1..))]
@@ -89,4 +92,17 @@ pub fn parse_core_range(input: &str) -> Result<RangeInclusive<usize>, String> {
         return Err("Not enough CPU cores".to_owned());
     }
     Ok(start..=stop)
+}
+
+pub fn parse_mac(input: &str) -> Result<[u8; 6], String> {
+    // Accepting a MAC address in the usual way (hex separated by colon)
+    let mut mac = [0u8; 6];
+    let splits: Vec<_> = input.split(':').collect();
+    if splits.len() != 6 {
+        return Err("Malformed MAC address".to_owned());
+    }
+    for (i, octet) in splits.iter().enumerate() {
+        mac[i] = u8::from_str_radix(octet, 16).map_err(|_| "Invalid MAC")?;
+    }
+    Ok(mac)
 }

@@ -72,7 +72,7 @@ async fn main() -> eyre::Result<()> {
     info!("Setting up SNAP");
     let mut device = Device::new(cli.fpga_addr);
     device.reset()?;
-    device.start_networking()?;
+    device.start_networking(&cli.mac)?;
     let packet_start = if !cli.skip_ntp {
         info!("Triggering the flow of packets via PPS");
         device.trigger(&time_sync.unwrap())?

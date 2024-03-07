@@ -60,7 +60,7 @@ pub fn dada_consumer(
     // Send the header (heimdall only wants one)
     let mut header = HashMap::from([
         ("NCHAN".to_owned(), CHANNELS.to_string()),
-        ("BW".to_owned(), BANDWIDTH.to_string()),
+        ("BW".to_owned(), (-BANDWIDTH).to_string()),
         ("FREQ".to_owned(), "1405".to_owned()),
         ("NPOL".to_owned(), "1".to_owned()),
         ("NBIT".to_owned(), "32".to_owned()),

@@ -1,7 +1,7 @@
 use crate::fpga::Device;
 use crate::{capture::Stats, common::BLOCK_TIMEOUT};
-use actix_web::HttpResponse;
 use actix_web::{dev::Server, get, web, App, HttpServer};
+use actix_web::{HttpResponse, Responder};
 use hifitime::prelude::*;
 use paste::paste;
 use prometheus::{
@@ -73,14 +73,14 @@ static_prom!(
 );
 
 #[get("/metrics")]
-async fn metrics() -> HttpResponse {
+async fn metrics() -> impl Responder {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     HttpResponse::Ok().body(encoder.encode_to_string(&metric_families).unwrap())
 }
 
 #[get("/start_time")]
-async fn start_time(data: web::Data<Epoch>) -> HttpResponse {
+async fn start_time(data: web::Data<Epoch>) -> impl Responder {
     HttpResponse::Ok().body(data.to_mjd_tai_days().to_string())
 }
 

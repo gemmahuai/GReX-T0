@@ -81,7 +81,7 @@ async fn metrics() -> HttpResponse {
 
 #[get("/start_time")]
 async fn start_time(data: web::Data<Epoch>) -> HttpResponse {
-    HttpResponse::Ok().body(data.to_mjd_tai_days())
+    HttpResponse::Ok().body(data.to_mjd_tai_days().to_string())
 }
 
 fn update_spec(device: &mut Device) -> eyre::Result<()> {

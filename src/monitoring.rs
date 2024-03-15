@@ -1,5 +1,6 @@
 use crate::fpga::Device;
 use crate::{capture::Stats, common::BLOCK_TIMEOUT};
+use actix_web::HttpResponse;
 use actix_web::{dev::Server, get, web, App, HttpServer};
 use hifitime::prelude::*;
 use paste::paste;
@@ -72,15 +73,15 @@ static_prom!(
 );
 
 #[get("/metrics")]
-async fn metrics() -> String {
+async fn metrics() -> HttpResponse {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
-    encoder.encode_to_string(&metric_families).unwrap()
+    HttpResponse::Ok().body(encoder.encode_to_string(&metric_families).unwrap())
 }
 
 #[get("/start_time")]
-async fn start_time(data: web::Data<Epoch>) -> String {
-    data.to_mjd_tai_days().to_string()
+async fn start_time(data: web::Data<Epoch>) -> HttpResponse {
+    HttpResponse::Ok().body(data.to_mjd_tai_days())
 }
 
 fn update_spec(device: &mut Device) -> eyre::Result<()> {

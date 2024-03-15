@@ -80,8 +80,9 @@ async fn main() -> eyre::Result<()> {
         info!("Blindly triggering (no GPS), timing will be off");
         device.blind_trigger()?
     };
-    // Create a clone of the packet start time to hand off to the other thread
-    let psc = packet_start;
+    // Create clones of the packet start time to hand off to the other threads
+    let psc_exfil = packet_start;
+    let psc_monitoring = packet_start;
     if cli.trig {
         device.force_pps()?;
     }
@@ -159,14 +160,14 @@ async fn main() -> eyre::Result<()> {
                     args::Exfil::Psrdada { key, samples } => exfil::dada_consumer(
                         key,
                         ex_r,
-                        psc,
+                        psc_exfil,
                         2usize.pow(cli.downsample_power),
                         samples,
                         sd_exfil_r
                     ),
                     args::Exfil::Filterbank => exfil::filterbank_consumer(
                         ex_r,
-                        psc,
+                        psc_exfil,
                         2usize.pow(cli.downsample_power),
                         &cli.filterbank_path,
                         sd_exfil_r
@@ -183,7 +184,10 @@ async fn main() -> eyre::Result<()> {
 
     let _ = try_join!(
         // Start the webserver
-        tokio::spawn(monitoring::start_web_server(cli.metrics_port)?),
+        tokio::spawn(monitoring::start_web_server(
+            cli.metrics_port,
+            psc_monitoring
+        )?),
         // Start the trigger watch
         tokio::spawn(dumps::trigger_task(trig_s, cli.trig_port, sd_trig_r))
     )?;

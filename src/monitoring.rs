@@ -1,11 +1,12 @@
 use crate::fpga::Device;
 use crate::{capture::Stats, common::BLOCK_TIMEOUT};
-use actix_web::{dev::Server, get, App, HttpResponse, HttpServer, Responder};
-use lazy_static::lazy_static;
+use actix_web::{dev::Server, get, web, App, HttpServer};
+use hifitime::prelude::*;
+use paste::paste;
 use prometheus::{
-    register_gauge, register_gauge_vec, register_int_gauge, register_int_gauge_vec, Gauge,
-    GaugeVec, IntGauge, IntGaugeVec, TextEncoder,
+    register_gauge, register_gauge_vec, register_int_gauge, Gauge, GaugeVec, IntGauge, TextEncoder,
 };
+use std::sync::OnceLock;
 use thingbuf::mpsc::blocking::Receiver;
 use thingbuf::mpsc::errors::RecvTimeoutError;
 use tokio::sync::broadcast;
@@ -13,48 +14,73 @@ use tracing::{info, warn};
 
 const MONITOR_ACCUMULATIONS: u32 = 1048576; // Around 8 second at 8.192us
 
-lazy_static! {
-    static ref CHANNEL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
-        "task_channel_backlog",
-        "Number of yet-to-be-processed data in each inter-task channel",
-        &["target_channel"]
-    )
-    .unwrap();
-    static ref SPECTRUM_GAUGE: GaugeVec = register_gauge_vec!(
+macro_rules! static_prom {
+    ($name:ident, $kind: ty, $create:expr) => {
+        paste! {
+            fn $name() -> &'static $kind {
+                static [<$name:upper>]: OnceLock<$kind> = OnceLock::new();
+                [<$name:upper>].get_or_init(|| { $create })
+            }
+        }
+    };
+}
+
+// Global prometheus state variables
+static_prom!(
+    spectrum_gauge,
+    GaugeVec,
+    register_gauge_vec!(
         "spectrum",
         "Average spectrum data",
         &["channel", "polarization"]
     )
-    .unwrap();
-    static ref PACKET_GAUGE: IntGauge =
-        register_int_gauge!("processed_packets", "Number of packets we've processed").unwrap();
-    static ref DROP_GAUGE: IntGauge =
-        register_int_gauge!("dropped_packets", "Number of packets we've dropped").unwrap();
-    static ref SHUFFLED_GAUGE: IntGauge = register_int_gauge!(
+    .unwrap()
+);
+static_prom!(
+    packet_gauge,
+    IntGauge,
+    register_int_gauge!("processed_packets", "Number of packets we've processed").unwrap()
+);
+static_prom!(
+    drop_gauge,
+    IntGauge,
+    register_int_gauge!("dropped_packets", "Number of packets we've dropped").unwrap()
+);
+static_prom!(
+    shuffled_gauge,
+    IntGauge,
+    register_int_gauge!(
         "shuffled_packets",
         "Number of packets that were out of order"
     )
-    .unwrap();
-    static ref FFT_OVFL_GAUGE: IntGauge =
-        register_int_gauge!("fft_ovfl", "Counter of FFT overflows").unwrap();
-    static ref REQUANT_OVFL_GAUGE: IntGaugeVec = register_int_gauge_vec!(
-        "requant_ovfl",
-        "Counter of requantization overflows",
-        &["polarization"]
-    )
-    .unwrap();
-    static ref FPGA_TEMP: Gauge =
-        register_gauge!("fpga_temp", "Internal FPGA temperature").unwrap();
-    static ref ADC_RMS_GAUGE: GaugeVec =
-        register_gauge_vec!("adc_rms", "RMS value of raw adc values", &["channel"]).unwrap();
-}
+    .unwrap()
+);
+static_prom!(
+    fft_ovlf_gauge,
+    IntGauge,
+    register_int_gauge!("fft_ovfl", "Counter of FFT overflows").unwrap()
+);
+static_prom!(
+    fpga_temp,
+    Gauge,
+    register_gauge!("fpga_temp", "Internal FPGA temperature").unwrap()
+);
+static_prom!(
+    adc_rms_gauge,
+    GaugeVec,
+    register_gauge_vec!("adc_rms", "RMS value of raw adc values", &["channel"]).unwrap()
+);
 
 #[get("/metrics")]
-async fn metrics() -> impl Responder {
+async fn metrics() -> String {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
-    let body_str = encoder.encode_to_string(&metric_families).unwrap();
-    HttpResponse::Ok().body(body_str)
+    encoder.encode_to_string(&metric_families).unwrap()
+}
+
+#[get("/start_time")]
+async fn start_time(data: web::Data<Epoch>) -> String {
+    data.to_mjd_tai_days().to_string()
 }
 
 fn update_spec(device: &mut Device) -> eyre::Result<()> {
@@ -75,17 +101,17 @@ fn update_spec(device: &mut Device) -> eyre::Result<()> {
         .collect();
     // Finally update the gauge
     for (i, v) in a_norm.iter().enumerate() {
-        SPECTRUM_GAUGE
+        spectrum_gauge()
             .with_label_values(&[&i.to_string(), "a"])
             .set(*v);
     }
     for (i, v) in b_norm.iter().enumerate() {
-        SPECTRUM_GAUGE
+        spectrum_gauge()
             .with_label_values(&[&i.to_string(), "b"])
             .set(*v);
     }
     for (i, v) in stokes_norm.iter().enumerate() {
-        SPECTRUM_GAUGE
+        spectrum_gauge()
             .with_label_values(&[&i.to_string(), "stokes"])
             .set(*v);
     }
@@ -107,9 +133,9 @@ pub fn monitor_task(
         // Blocking here is ok, these are infrequent events
         match stats.recv_ref_timeout(BLOCK_TIMEOUT) {
             Ok(stat) => {
-                PACKET_GAUGE.set(stat.processed.try_into().unwrap());
-                DROP_GAUGE.set(stat.drops.try_into().unwrap());
-                SHUFFLED_GAUGE.set(stat.shuffled.try_into().unwrap());
+                packet_gauge().set(stat.processed.try_into().unwrap());
+                drop_gauge().set(stat.drops.try_into().unwrap());
+                shuffled_gauge().set(stat.shuffled.try_into().unwrap());
             }
             Err(RecvTimeoutError::Timeout) => continue,
             Err(RecvTimeoutError::Closed) => break,
@@ -124,26 +150,12 @@ pub fn monitor_task(
 
         // Metrics from the FPGA
         match device.fpga.fft_overflow_cnt.read() {
-            Ok(v) => FFT_OVFL_GAUGE.set(u32::from(v).into()),
+            Ok(v) => fft_ovlf_gauge().set(u32::from(v).into()),
             Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
 
-        // match device.fpga.requant_a_overflow.read() {
-        //     Ok(v) => REQUANT_OVFL_GAUGE
-        //         .with_label_values(&["a"])
-        //         .set(u32::from(v).try_into().unwrap()),
-        //     Err(e) => warn!("SNAP Error - {e}, {:?}", e),
-        // }
-
-        // match device.fpga.requant_b_overflow.read() {
-        //     Ok(v) => REQUANT_OVFL_GAUGE
-        //         .with_label_values(&["b"])
-        //         .set(u32::from(v).try_into().unwrap()),
-        //     Err(e) => warn!("SNAP Error - {e}, {:?}", e),
-        // }
-
         match device.fpga.transport.lock().unwrap().temperature() {
-            Ok(v) => FPGA_TEMP.set(v.into()),
+            Ok(v) => fpga_temp().set(v.into()),
             Err(e) => warn!("SNAP Error - {e}, {:?}", e),
         }
 
@@ -163,8 +175,8 @@ pub fn monitor_task(
                     }
                     rms_a = ((1.0 / (n as f64)) * rms_a).sqrt();
                     rms_b = ((1.0 / (n as f64)) * rms_b).sqrt();
-                    ADC_RMS_GAUGE.with_label_values(&["a"]).set(rms_a);
-                    ADC_RMS_GAUGE.with_label_values(&["b"]).set(rms_b);
+                    adc_rms_gauge().with_label_values(&["a"]).set(rms_a);
+                    adc_rms_gauge().with_label_values(&["b"]).set(rms_b);
                 }
                 Err(e) => warn!("SNAP Error - {e}, {:?}", e),
             }
@@ -173,11 +185,18 @@ pub fn monitor_task(
     Ok(())
 }
 
-pub fn start_web_server(metrics_port: u16) -> eyre::Result<Server> {
+pub fn start_web_server(metrics_port: u16, packet_start: Epoch) -> eyre::Result<Server> {
     info!("Starting metrics webserver");
-    let server = HttpServer::new(|| App::new().service(metrics))
-        .bind(("0.0.0.0", metrics_port))?
-        .workers(1)
-        .run();
+    // Create the server coroutine
+    let server = HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(packet_start))
+            .service(metrics)
+            .service(start_time)
+    })
+    .bind(("0.0.0.0", metrics_port))?
+    .workers(1)
+    .run();
+    // And return the coroutine for the caller to spawn
     Ok(server)
 }

@@ -9,7 +9,6 @@ casperfpga_derive = "0.2"
 clap = { version = "4", features = ["derive"] }
 fixed = "1"
 actix-web = "4"
-lazy_static = "1.4"
 prometheus = "0.13"
 ndarray = "0.15"
 num-complex = "0.4"
@@ -36,6 +35,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 whittaker_smoother = "0.1"
 median = "0.3"
 netcdf = { version = "0.9", features = ["static"] }
+paste = "1"
 
 [lib]
 name = "grex_t0"
